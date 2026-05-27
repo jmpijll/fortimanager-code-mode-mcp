@@ -164,20 +164,36 @@ async function main(): Promise<void> {
   const codeExecutor = new CodeExecutor(client);
   logger.info(`Executors created in ${String(Date.now() - executorStart)}ms`);
 
-  // 7. Create MCP server
-  const server = createMcpServer({
-    searchExecutor,
-    codeExecutor,
-    specVersion: config.fmgApiVersion,
-    logger,
-  });
-  logger.info('MCP server created with search + execute tools');
-
-  // 8. Start transport
+  // 7. Start transport
+  //
+  // The stdio transport is single-client by nature, so we build one McpServer
+  // and reuse it. The HTTP transport must support multiple sequential clients
+  // (each performs its own `initialize` handshake), so we pass a factory and
+  // build a fresh McpServer per request — see `startHttpTransport` for details.
   if (config.mcpTransport === 'stdio') {
+    const server = createMcpServer({
+      searchExecutor,
+      codeExecutor,
+      specVersion: config.fmgApiVersion,
+      logger,
+    });
+    logger.info('MCP server created with search + execute tools');
     await startStdioTransport(server, logger);
   } else {
-    await startHttpTransport(server, config, logger);
+    logger.info('MCP server factory ready (search + execute tools, per-request instance)');
+    await startHttpTransport(
+      {
+        serverFactory: () =>
+          createMcpServer({
+            searchExecutor,
+            codeExecutor,
+            specVersion: config.fmgApiVersion,
+            logger,
+          }),
+      },
+      config,
+      logger,
+    );
   }
 }
 

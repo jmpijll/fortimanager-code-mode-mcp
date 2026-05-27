@@ -9,6 +9,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 _No unreleased changes._
 
+## [1.0.2] — 2026-05-27
+
+### Fixed
+
+- **HTTP transport accepts multiple clients / reconnects** — `startHttpTransport` now builds a fresh `McpServer` and stateless `StreamableHTTPServerTransport` per `/mcp` request. Previously a single module-scope server was reused for every request, so any client after the first was rejected with `-32600 "Invalid Request: Server already initialized"`, breaking reconnects and multi-client deployments. Verified end-to-end against a live FortiManager 7.6.6 with multiple sequential `opencode` (deepseek) sessions. ([#13](https://github.com/jmpijll/fortimanager-code-mode-mcp/issues/13), [#14](https://github.com/jmpijll/fortimanager-code-mode-mcp/pull/14)) — thanks [@AndreADV77](https://github.com/AndreADV77) for the report and fix proposal.
+
 ## [1.0.1] — 2026-03-21
 
 ### Fixed
@@ -92,7 +98,8 @@ _No unreleased changes._
 - **Graceful shutdown** for both stdio and HTTP transports with signal deduplication
 - **Startup health check** validates FortiManager connectivity at boot
 
-[Unreleased]: https://github.com/jmpijll/fortimanager-code-mode-mcp/compare/v1.0.1...HEAD
+[Unreleased]: https://github.com/jmpijll/fortimanager-code-mode-mcp/compare/v1.0.2...HEAD
+[1.0.2]: https://github.com/jmpijll/fortimanager-code-mode-mcp/compare/v1.0.1...v1.0.2
 [1.0.1]: https://github.com/jmpijll/fortimanager-code-mode-mcp/compare/v1.0.0...v1.0.1
 [1.0.0]: https://github.com/jmpijll/fortimanager-code-mode-mcp/compare/v0.2.0...v1.0.0
 [0.2.0]: https://github.com/jmpijll/fortimanager-code-mode-mcp/compare/v0.1.0...v0.2.0
