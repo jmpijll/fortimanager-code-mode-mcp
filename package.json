@@ -1,6 +1,6 @@
 {
   "name": "fortimanager-code-mode-mcp",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "description": "MCP server for FortiManager using Code Mode pattern — 2 tools (search + execute) with QuickJS WASM sandbox",
   "type": "module",
   "main": "dist/index.js",
