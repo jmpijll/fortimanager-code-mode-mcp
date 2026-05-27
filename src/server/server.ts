@@ -148,18 +148,25 @@ export interface CreateServerOptions {
   logger?: {
     info: (msg: string, ...args: unknown[]) => void;
   };
+  /**
+   * Optional FortiManager token to use for live API calls made by this
+   * server's `execute` tool. When set, overrides the executor's default
+   * (env) token for the lifetime of this server instance. Used by the
+   * HTTP transport for per-request token passthrough.
+   */
+  fmgToken?: string;
 }
 
 /**
  * Create and configure the MCP server with search and execute tools.
  */
 export function createMcpServer(options: CreateServerOptions): McpServer {
-  const { searchExecutor, codeExecutor, specVersion, logger } = options;
+  const { searchExecutor, codeExecutor, specVersion, logger, fmgToken } = options;
 
   const server = new McpServer(
     {
       name: 'fortimanager-code-mode',
-      version: '1.0.2',
+      version: '1.1.0',
     },
     {
       capabilities: { tools: {} },
@@ -251,7 +258,7 @@ export function createMcpServer(options: CreateServerOptions): McpServer {
         };
       }
       try {
-        const result = await codeExecutor.execute(code);
+        const result = await codeExecutor.execute(code, fmgToken ? { fmgToken } : undefined);
         logger?.info(`[execute] ${result.ok ? 'ok' : 'error'} ${String(result.durationMs)}ms`);
         return formatToolResult(result);
       } catch (err: unknown) {

@@ -172,6 +172,45 @@ describe('FmgClient', () => {
       expect(result.result).toHaveLength(1);
       expect(result.result[0]!.status.code).toBe(0);
     });
+
+    it('uses tokenOverride for the Authorization header when supplied', async () => {
+      mockFetch(makeSuccessResponse(1, '/sys/status', {}));
+
+      await client.rawRequest('get', [{ url: '/sys/status' }], {
+        tokenOverride: 'override-token-xyz',
+      });
+
+      const callArgs = vi.mocked(fetch).mock.calls[0]!;
+      const headers = (callArgs[1]!.headers as Record<string, string>) ?? {};
+      expect(headers['Authorization']).toBe('Bearer override-token-xyz');
+    });
+
+    it('falls back to the configured token when tokenOverride is omitted', async () => {
+      mockFetch(makeSuccessResponse(1, '/sys/status', {}));
+
+      await client.rawRequest('get', [{ url: '/sys/status' }]);
+
+      const callArgs = vi.mocked(fetch).mock.calls[0]!;
+      const headers = (callArgs[1]!.headers as Record<string, string>) ?? {};
+      expect(headers['Authorization']).toBe(`Bearer ${SAMPLE_CLIENT_CONFIG.apiToken}`);
+    });
+
+    it('does not mutate the client state — subsequent calls use the configured token', async () => {
+      mockFetch(makeSuccessResponse(1, '/sys/status', {}));
+      mockFetch(makeSuccessResponse(2, '/sys/status', {}));
+
+      await client.rawRequest('get', [{ url: '/sys/status' }], {
+        tokenOverride: 'one-shot-token',
+      });
+      await client.rawRequest('get', [{ url: '/sys/status' }]);
+
+      const firstHeaders =
+        (vi.mocked(fetch).mock.calls[0]![1]!.headers as Record<string, string>) ?? {};
+      const secondHeaders =
+        (vi.mocked(fetch).mock.calls[1]![1]!.headers as Record<string, string>) ?? {};
+      expect(firstHeaders['Authorization']).toBe('Bearer one-shot-token');
+      expect(secondHeaders['Authorization']).toBe(`Bearer ${SAMPLE_CLIENT_CONFIG.apiToken}`);
+    });
   });
 
   describe('checkHealth()', () => {

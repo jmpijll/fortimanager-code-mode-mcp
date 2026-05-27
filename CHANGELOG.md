@@ -9,6 +9,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 _No unreleased changes._
 
+## [1.1.0] — 2026-05-27
+
+### Added
+
+- **Optional Bearer auth on the HTTP `/mcp` endpoint** — set `MCP_API_KEY=<key>` and every request must include `Authorization: Bearer <key>` (timing-safe compare). Missing/wrong tokens get `401` with a `WWW-Authenticate: Bearer realm="mcp"` header. `/health` stays open for health-checkers. Unset = open endpoint (preserves current behavior). HTTP transport only — stdio is single-process and unaffected. ([#11](https://github.com/jmpijll/fortimanager-code-mode-mcp/issues/11)) — thanks [@kb1isz](https://github.com/kb1isz) for the request.
+- **Per-client FortiManager token passthrough** — set `MCP_TOKEN_PASSTHROUGH=true` and each MCP client can supply its own FortiManager admin token via the `X-FMG-Token` header. That token is used (instead of `FMG_API_TOKEN`) for live API calls made by the `execute` tool *for that request only*, so FortiManager's own admin-profile RBAC enforces per-user permissions. Requests without the header fall back to `FMG_API_TOKEN`, so existing single-tenant deployments keep working unchanged. HTTP transport only. ([#11](https://github.com/jmpijll/fortimanager-code-mode-mcp/issues/11))
+- **`FmgClient.rawRequest(method, params, opts?: { tokenOverride })`** — new optional per-call token override threaded through `CodeExecutor.execute(code, opts?: { fmgToken })`. The shared `FmgClient` (and its undici dispatcher) is reused across requests; only the `Authorization` header is swapped per call.
+- **18 new tests** across config / client / code-executor / HTTP transport covering the auth gate, passthrough, fallback, and combined modes (total 90).
+
+### Changed
+
+- HTTP transport's `serverFactory` now receives an `McpRequestContext` (currently exposing `fmgToken`) instead of being called with no arguments. The stdio path is unchanged.
+- `startHttpTransport` now removes its installed `SIGINT` / `SIGTERM` listeners when `close()` is called, so repeated test runs no longer leak signal handlers on the host process.
+
 ## [1.0.2] — 2026-05-27
 
 ### Fixed
@@ -98,7 +112,8 @@ _No unreleased changes._
 - **Graceful shutdown** for both stdio and HTTP transports with signal deduplication
 - **Startup health check** validates FortiManager connectivity at boot
 
-[Unreleased]: https://github.com/jmpijll/fortimanager-code-mode-mcp/compare/v1.0.2...HEAD
+[Unreleased]: https://github.com/jmpijll/fortimanager-code-mode-mcp/compare/v1.1.0...HEAD
+[1.1.0]: https://github.com/jmpijll/fortimanager-code-mode-mcp/compare/v1.0.2...v1.1.0
 [1.0.2]: https://github.com/jmpijll/fortimanager-code-mode-mcp/compare/v1.0.1...v1.0.2
 [1.0.1]: https://github.com/jmpijll/fortimanager-code-mode-mcp/compare/v1.0.0...v1.0.1
 [1.0.0]: https://github.com/jmpijll/fortimanager-code-mode-mcp/compare/v0.2.0...v1.0.0

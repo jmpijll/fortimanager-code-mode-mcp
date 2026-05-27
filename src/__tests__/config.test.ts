@@ -36,6 +36,8 @@ describe('loadConfig', () => {
     expect(config.fmgApiVersion).toBe('7.6');
     expect(config.mcpTransport).toBe('stdio');
     expect(config.mcpHttpPort).toBe(8000);
+    expect(config.mcpApiKey).toBeUndefined();
+    expect(config.mcpTokenPassthrough).toBe(false);
   });
 
   it('loads full config with all overrides', () => {
@@ -85,6 +87,28 @@ describe('loadConfig', () => {
   it('throws on invalid MCP_TRANSPORT', () => {
     setEnv({ MCP_TRANSPORT: 'grpc' });
 
+    expect(() => loadConfig()).toThrow('Configuration validation failed');
+  });
+
+  it('reads MCP_API_KEY and MCP_TOKEN_PASSTHROUGH', () => {
+    setEnv({
+      MCP_API_KEY: 'my-mcp-bearer-key',
+      MCP_TOKEN_PASSTHROUGH: 'true',
+    });
+
+    const config = loadConfig();
+
+    expect(config.mcpApiKey).toBe('my-mcp-bearer-key');
+    expect(config.mcpTokenPassthrough).toBe(true);
+  });
+
+  it('MCP_TOKEN_PASSTHROUGH defaults to false and rejects non-boolean strings', () => {
+    setEnv({ MCP_TOKEN_PASSTHROUGH: 'yes' });
+    expect(() => loadConfig()).toThrow('Configuration validation failed');
+  });
+
+  it('rejects an empty MCP_API_KEY', () => {
+    setEnv({ MCP_API_KEY: '' });
     expect(() => loadConfig()).toThrow('Configuration validation failed');
   });
 });

@@ -32,6 +32,30 @@ const configSchema = z.object({
 
   /** HTTP server port (only for http transport) */
   mcpHttpPort: z.coerce.number().int().min(1).max(65535).default(8000),
+
+  /**
+   * Optional Bearer token required on the HTTP `/mcp` endpoint.
+   *
+   * When set, every MCP request must include `Authorization: Bearer <MCP_API_KEY>`
+   * (case-insensitive scheme). When unset, the endpoint is open (preserving
+   * current behavior). Stdio transport is unaffected — it's single-process and
+   * doesn't have a network-facing surface.
+   */
+  mcpApiKey: z.string().min(1).optional(),
+
+  /**
+   * When true, the HTTP transport reads an `X-FMG-Token` header on each
+   * `/mcp` request and uses that token (instead of `FMG_API_TOKEN`) when
+   * calling FortiManager from inside the sandboxed `execute` tool. Requests
+   * without the header fall back to `FMG_API_TOKEN`, so single-tenant
+   * deployments keep working unchanged.
+   *
+   * Default `false`. Stdio transport is unaffected.
+   */
+  mcpTokenPassthrough: z
+    .enum(['true', 'false'])
+    .default('false')
+    .transform((v) => v === 'true'),
 });
 
 export type AppConfig = z.infer<typeof configSchema>;
@@ -51,6 +75,8 @@ export function loadConfig(): AppConfig {
     fmgApiVersion: process.env['FMG_API_VERSION'],
     mcpTransport: process.env['MCP_TRANSPORT'],
     mcpHttpPort: process.env['MCP_HTTP_PORT'],
+    mcpApiKey: process.env['MCP_API_KEY'],
+    mcpTokenPassthrough: process.env['MCP_TOKEN_PASSTHROUGH'],
   });
 
   if (!result.success) {
