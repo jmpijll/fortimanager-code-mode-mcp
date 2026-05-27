@@ -6,6 +6,7 @@
  */
 
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
+import { timingSafeEqual } from 'node:crypto';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
@@ -100,6 +101,23 @@ function getClientIp(req: IncomingMessage): string {
 }
 
 /**
+ * Constant-time check of the request's `Authorization` header against the
+ * expected `Bearer <apiKey>` string. Returns true when they match.
+ *
+ * Uses `crypto.timingSafeEqual` to avoid leaking the API key via response-
+ * time differences on early-mismatch. The length check is itself observable
+ * but only reveals the length of the configured key, not its contents.
+ */
+function checkAuthHeader(req: IncomingMessage, expected: string): boolean {
+  const provided = req.headers['authorization'];
+  if (typeof provided !== 'string') return false;
+  const expectedBuf = Buffer.from(expected);
+  const providedBuf = Buffer.from(provided);
+  if (expectedBuf.length !== providedBuf.length) return false;
+  return timingSafeEqual(expectedBuf, providedBuf);
+}
+
+/**
  * Start the Stdio transport — reads from stdin, writes to stdout.
  */
 export async function startStdioTransport(server: McpServer, logger: Logger): Promise<void> {
@@ -122,6 +140,20 @@ export async function startStdioTransport(server: McpServer, logger: Logger): Pr
 }
 
 /**
+ * Per-request context derived from the incoming HTTP request, passed to the
+ * caller's `serverFactory`.
+ */
+export interface McpRequestContext {
+  /**
+   * Per-request FortiManager API token taken from the `X-FMG-Token` request
+   * header (only populated when `MCP_TOKEN_PASSTHROUGH=true` is set on the
+   * server *and* the client supplied the header). Undefined otherwise; the
+   * caller should fall back to its configured default token.
+   */
+  fmgToken?: string;
+}
+
+/**
  * Options for {@link startHttpTransport}.
  */
 export interface HttpTransportOptions {
@@ -137,10 +169,27 @@ export interface HttpTransportOptions {
    * Shared, expensive resources (FortiManager client, QuickJS WASM, executors)
    * should be captured in the closure passed here so they are reused across
    * requests rather than rebuilt every time.
+   *
+   * The optional `ctx` argument carries per-request fields derived from HTTP
+   * headers — most importantly the per-MCP-client FortiManager token when
+   * `MCP_TOKEN_PASSTHROUGH=true`.
    */
-  serverFactory: () => McpServer;
+  serverFactory: (ctx: McpRequestContext) => McpServer;
   /** Optional HTTP server bind host. Defaults to Node's default (all interfaces). */
   host?: string;
+  /**
+   * If set, every `/mcp` request must include
+   * `Authorization: Bearer <apiKey>`. Missing / malformed / wrong tokens are
+   * rejected with `401` and a `WWW-Authenticate: Bearer realm="mcp"` header.
+   * Unset = open endpoint (preserves current behavior).
+   */
+  apiKey?: string;
+  /**
+   * When `true`, the transport reads `X-FMG-Token` from each `/mcp` request
+   * and exposes it on `McpRequestContext.fmgToken`. When `false` (default)
+   * the header is ignored and `ctx.fmgToken` is always undefined.
+   */
+  tokenPassthrough?: boolean;
 }
 
 /**
@@ -169,10 +218,14 @@ export async function startHttpTransport(
   config: AppConfig,
   logger: Logger,
 ): Promise<HttpTransportHandle> {
-  const { serverFactory } = options;
+  const { serverFactory, apiKey, tokenPassthrough = false } = options;
 
   const stats = createStats();
   const rateLimiter = new RateLimiter(60_000, 60); // 60 requests per minute per IP
+
+  // Pre-compute the expected `Authorization` header once so the per-request
+  // check is just a constant-time buffer compare.
+  const expectedAuthHeader = apiKey ? `Bearer ${apiKey}` : undefined;
 
   // Periodic cleanup of rate limiter state (every 5 minutes)
   const cleanupInterval = setInterval(() => {
@@ -224,9 +277,38 @@ export async function startHttpTransport(
 
         // MCP endpoint — handle POST, GET, DELETE for Streamable HTTP
         if (url === '/mcp') {
+          // Optional Bearer auth gate (only when MCP_API_KEY is configured).
+          // Runs before request bookkeeping so unauthenticated requests don't
+          // pollute the mcpRequests counter.
+          if (expectedAuthHeader && !checkAuthHeader(req, expectedAuthHeader)) {
+            stats.errors++;
+            logger.info(`Unauthorized: ${clientIp} ${req.method ?? 'UNKNOWN'} ${url}`);
+            res.writeHead(401, {
+              'Content-Type': 'application/json',
+              'WWW-Authenticate': 'Bearer realm="mcp"',
+            });
+            res.end(
+              JSON.stringify({
+                jsonrpc: '2.0',
+                error: { code: -32001, message: 'Unauthorized' },
+                id: null,
+              }),
+            );
+            return;
+          }
+
           stats.mcpRequests++;
-          logger.info(`MCP ${req.method ?? 'UNKNOWN'} from ${clientIp}`);
-          await handleMcpRequest(req, res, serverFactory, logger);
+          const ctx: McpRequestContext = {};
+          if (tokenPassthrough) {
+            const headerToken = req.headers['x-fmg-token'];
+            if (typeof headerToken === 'string' && headerToken.length > 0) {
+              ctx.fmgToken = headerToken;
+            }
+          }
+          logger.info(
+            `MCP ${req.method ?? 'UNKNOWN'} from ${clientIp}${ctx.fmgToken ? ' [token=passthrough]' : ''}`,
+          );
+          await handleMcpRequest(req, res, () => serverFactory(ctx), logger);
           const elapsed = Date.now() - startTime;
           logger.info(`MCP ${req.method ?? 'UNKNOWN'} completed in ${String(elapsed)}ms`);
           return;
@@ -264,9 +346,17 @@ export async function startHttpTransport(
 
   // Graceful shutdown
   let shuttingDown = false;
+  const shutdown = (): void => {
+    void close();
+  };
+
   const close = async (): Promise<void> => {
     if (shuttingDown) return;
     shuttingDown = true;
+    // Detach signal handlers we installed so calling close() (e.g. in tests)
+    // doesn't leak listeners on the global process.
+    process.removeListener('SIGINT', shutdown);
+    process.removeListener('SIGTERM', shutdown);
     logger.info('Shutting down HTTP server...');
     clearInterval(cleanupInterval);
     await new Promise<void>((resolvePromise) => {
@@ -276,9 +366,6 @@ export async function startHttpTransport(
     });
   };
 
-  const shutdown = (): void => {
-    void close();
-  };
   process.once('SIGINT', shutdown);
   process.once('SIGTERM', shutdown);
 

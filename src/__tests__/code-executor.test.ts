@@ -74,7 +74,25 @@ describe('CodeExecutor', () => {
 
       expect(result.ok).toBe(true);
       expect(result.data).toEqual({ Version: '7.6.5', Hostname: 'fmg-01' });
-      expect(client.rawRequest).toHaveBeenCalledWith('get', [{ url: '/sys/status' }]);
+      expect(client.rawRequest).toHaveBeenCalledWith('get', [{ url: '/sys/status' }], undefined);
+    });
+
+    it('forwards opts.fmgToken as a tokenOverride on the FmgClient call', async () => {
+      const client = createMockClient();
+      const executor = createExecutor(client);
+
+      vi.mocked(client.rawRequest).mockResolvedValueOnce(
+        makeSuccessResponse(1, '/sys/status', { Hostname: 'tenant-a' }),
+      );
+
+      await executor.execute(
+        `var r = fortimanager.request('get', [{ url: '/sys/status' }]); r.result[0].data`,
+        { fmgToken: 'tenant-a-token' },
+      );
+
+      expect(client.rawRequest).toHaveBeenCalledWith('get', [{ url: '/sys/status' }], {
+        tokenOverride: 'tenant-a-token',
+      });
     });
 
     it('handles API error responses', async () => {

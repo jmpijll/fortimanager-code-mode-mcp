@@ -316,6 +316,34 @@ resp.result[0].data;
 | `FMG_API_VERSION` | No       | `7.6`   | API spec version (`7.4` or `7.6`)                                                                                                 |
 | `MCP_TRANSPORT`   | No       | `stdio` | Transport mode (`http` or `stdio`)                                                                                                |
 | `MCP_HTTP_PORT`   | No       | `8000`  | HTTP server port (only used with `http` transport)                                                                                |
+| `MCP_API_KEY`     | No       | —       | If set, `/mcp` requires `Authorization: Bearer <key>`. HTTP transport only.                                                       |
+| `MCP_TOKEN_PASSTHROUGH` | No | `false` | If `true`, read `X-FMG-Token` per request and forward to FortiManager. Missing header → fall back to `FMG_API_TOKEN`. HTTP only.   |
+
+### Optional auth for the HTTP transport
+
+The HTTP transport supports two independent auth dimensions, both off by default. The stdio transport is single-process and unaffected.
+
+**Gate access to the MCP server itself.** Set `MCP_API_KEY=<long-random-string>` and every `/mcp` request must include `Authorization: Bearer <MCP_API_KEY>`. Missing or wrong tokens get `401`. `/health` stays open for health-checkers.
+
+**Per-client FortiManager identity.** Set `MCP_TOKEN_PASSTHROUGH=true` and each MCP client can supply its own FortiManager admin token via the `X-FMG-Token` header. That token is used (instead of `FMG_API_TOKEN`) for live API calls made by the `execute` tool *for that request only*, so FortiManager's own admin-profile RBAC enforces per-user permissions. Requests without `X-FMG-Token` fall back to `FMG_API_TOKEN`, so existing single-tenant deployments keep working.
+
+Both can be combined: `Authorization` gates the server, `X-FMG-Token` carries the per-client FMG token.
+
+```json
+{
+  "mcpServers": {
+    "fortimanager": {
+      "command": "npx",
+      "args": [
+        "mcp-remote",
+        "https://fmg-mcp.example.com/mcp",
+        "--header", "Authorization:Bearer ${MCP_API_KEY}",
+        "--header", "X-FMG-Token:${MY_FMG_TOKEN}"
+      ]
+    }
+  }
+}
+```
 
 ## Development
 

@@ -133,13 +133,21 @@ export class FmgClient {
   /**
    * Send a raw JSON-RPC request. Useful for advanced use cases
    * or when called from the sandbox executor.
+   *
+   * `opts.tokenOverride` — if supplied, this token is used in the
+   * `Authorization: Bearer …` header for just this request instead of
+   * the configured auth provider's token. Lets the HTTP transport thread
+   * a per-MCP-client FortiManager token down through the executor without
+   * having to construct a whole new `FmgClient` (and a new undici Agent)
+   * per request. See `MCP_TOKEN_PASSTHROUGH` in `src/config.ts`.
    */
   async rawRequest<T = unknown>(
     method: FmgMethod,
     params: FmgRequestParams[],
+    opts?: { tokenOverride?: string },
   ): Promise<JsonRpcResponse<T>> {
     const request = this.buildRequest(method, params);
-    return this.sendRequest<T>(request);
+    return this.sendRequest<T>(request, opts?.tokenOverride);
   }
 
   // ── Health Check ────────────────────────────────────────────────
@@ -187,10 +195,15 @@ export class FmgClient {
   }
 
   /** Execute the HTTP request to FortiManager */
-  private async sendRequest<T>(request: JsonRpcRequest): Promise<JsonRpcResponse<T>> {
+  private async sendRequest<T>(
+    request: JsonRpcRequest,
+    tokenOverride?: string,
+  ): Promise<JsonRpcResponse<T>> {
     const headers: Record<string, string> = {
       'Content-Type': 'application/json',
-      ...this.auth.getAuthHeaders(),
+      ...(tokenOverride
+        ? { Authorization: `Bearer ${tokenOverride}` }
+        : this.auth.getAuthHeaders()),
     };
 
     // Build fetch options with timeout

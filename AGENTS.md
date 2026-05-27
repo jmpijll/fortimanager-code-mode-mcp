@@ -158,6 +158,8 @@ scripts/
 | `FMG_API_VERSION` | No | `7.6` | API spec version (`7.4` or `7.6`) |
 | `MCP_TRANSPORT` | No | `stdio` | Transport mode (`http` or `stdio`) |
 | `MCP_HTTP_PORT` | No | `8000` | HTTP server port |
+| `MCP_API_KEY` | No | — | If set, `/mcp` requires `Authorization: Bearer <key>` (HTTP transport only). |
+| `MCP_TOKEN_PASSTHROUGH` | No | `false` | If `true`, read `X-FMG-Token` per request and forward it to FortiManager (HTTP transport only). Missing header → fall back to `FMG_API_TOKEN`. |
 
 ---
 

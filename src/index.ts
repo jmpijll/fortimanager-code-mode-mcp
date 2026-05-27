@@ -171,6 +171,11 @@ async function main(): Promise<void> {
   // (each performs its own `initialize` handshake), so we pass a factory and
   // build a fresh McpServer per request — see `startHttpTransport` for details.
   if (config.mcpTransport === 'stdio') {
+    if (config.mcpApiKey || config.mcpTokenPassthrough) {
+      logger.warn(
+        'MCP_API_KEY / MCP_TOKEN_PASSTHROUGH only apply to the HTTP transport — ignoring for stdio.',
+      );
+    }
     const server = createMcpServer({
       searchExecutor,
       codeExecutor,
@@ -180,15 +185,26 @@ async function main(): Promise<void> {
     logger.info('MCP server created with search + execute tools');
     await startStdioTransport(server, logger);
   } else {
+    if (config.mcpApiKey) {
+      logger.info('MCP_API_KEY set — /mcp requires Authorization: Bearer <key>.');
+    }
+    if (config.mcpTokenPassthrough) {
+      logger.info(
+        'MCP_TOKEN_PASSTHROUGH=true — per-request X-FMG-Token header forwarded to FortiManager.',
+      );
+    }
     logger.info('MCP server factory ready (search + execute tools, per-request instance)');
     await startHttpTransport(
       {
-        serverFactory: () =>
+        apiKey: config.mcpApiKey,
+        tokenPassthrough: config.mcpTokenPassthrough,
+        serverFactory: (ctx) =>
           createMcpServer({
             searchExecutor,
             codeExecutor,
             specVersion: config.fmgApiVersion,
             logger,
+            fmgToken: ctx.fmgToken,
           }),
       },
       config,

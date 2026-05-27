@@ -63,8 +63,14 @@ export class CodeExecutor {
    * Inside the sandbox, `fortimanager.request(method, params)` is available.
    * It takes a JSON-RPC method and params array, proxies the call to the
    * host FMG client, and returns the response.
+   *
+   * `opts.fmgToken` — if supplied, every FortiManager call made from inside
+   * the sandbox uses this token in the `Authorization` header for this
+   * execution only, instead of the client's configured token. Used by the
+   * HTTP transport when `MCP_TOKEN_PASSTHROUGH=true` to forward a per-MCP-
+   * client token to FortiManager.
    */
-  async execute(code: string): Promise<ExecuteResult> {
+  async execute(code: string, opts?: { fmgToken?: string }): Promise<ExecuteResult> {
     const startTime = Date.now();
     const logs: LogEntry[] = [];
 
@@ -84,7 +90,7 @@ export class CodeExecutor {
       this.setupConsole(context, logs);
 
       // Inject fortimanager.request() proxy
-      this.setupFortiManagerProxy(context);
+      this.setupFortiManagerProxy(context, opts?.fmgToken);
 
       // Evaluate the code (async — supports await)
       const result = await context.evalCodeAsync(code, 'sandbox.js', { type: 'global' });
@@ -173,7 +179,7 @@ export class CodeExecutor {
 
   // ── FortiManager Proxy ──────────────────────────────────────────
 
-  private setupFortiManagerProxy(context: QuickJSAsyncContext): void {
+  private setupFortiManagerProxy(context: QuickJSAsyncContext, tokenOverride?: string): void {
     const fmgObj = context.newObject();
 
     // Track API call count to prevent runaway loops
@@ -221,6 +227,7 @@ export class CodeExecutor {
           const response = await this.client.rawRequest(
             method as import('../client/types.js').FmgMethod,
             validatedParams,
+            tokenOverride ? { tokenOverride } : undefined,
           );
           const responseJson = JSON.stringify(response);
           const responseStr = context.newString(responseJson);
