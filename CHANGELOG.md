@@ -7,7 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-_No unreleased changes._
+### Fixed
+
+- **HTTP transport accepts multiple clients / reconnects** — `startHttpTransport` now builds a fresh `McpServer` and stateless `StreamableHTTPServerTransport` per `/mcp` request. Previously a single module-scope server was reused for every request, so any client after the first was rejected with `-32600 "Invalid Request: Server already initialized"`, breaking reconnects and multi-client deployments. ([#13](https://github.com/jmpijll/fortimanager-code-mode-mcp/issues/13)) — thanks [@AndreADV77](https://github.com/AndreADV77) for the report and fix proposal.
 
 ## [1.0.1] — 2026-03-21
 
