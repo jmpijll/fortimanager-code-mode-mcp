@@ -11,7 +11,11 @@
     "dist/",
     "README.md",
     "LICENSE",
-    "CHANGELOG.md"
+    "CHANGELOG.md",
+    "docs/",
+    "CONTRIBUTING.md",
+    "SECURITY.md",
+    "AGENTS.md"
   ],
   "scripts": {
     "build": "tsc && node -e \"const fs=require('fs');const p=require('path');const s=p.join('src','spec');const d=p.join('dist','spec');fs.mkdirSync(d,{recursive:true});if(fs.existsSync(s)){fs.readdirSync(s).filter(f=>f.endsWith('.json')).forEach(f=>fs.copyFileSync(p.join(s,f),p.join(d,f)))}else{console.warn('WARN: src/spec/ not found — run npm run generate:spec to generate API specs')}\"",
@@ -26,7 +30,7 @@
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
     "generate:spec": "tsx scripts/generate-spec.ts",
-    "check": "npm run lint && npm run typecheck && npm test && npm run build"
+    "check": "npm run lint && npm run format:check && npm run typecheck && npm test && npm run build"
   },
   "keywords": [
     "fortimanager",

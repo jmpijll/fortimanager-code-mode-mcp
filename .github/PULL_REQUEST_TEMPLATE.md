@@ -1,39 +1,14 @@
-## Description
+## What changed
 
-<!-- Brief description of the changes -->
+Describe the problem and resulting behavior. Link related issues where applicable.
 
-## Type of Change
+## Verification
 
-- [ ] Bug fix (non-breaking change that fixes an issue)
-- [ ] New feature (non-breaking change that adds functionality)
-- [ ] Breaking change (fix or feature that would cause existing functionality to not work as expected)
-- [ ] Documentation update
-- [ ] Refactoring (no functional changes)
-- [ ] CI/CD or build changes
+- [ ] `npm run check` succeeds (lint, formatting, typecheck, mocked tests and build)
+- [ ] Relevant README, usage, contributor or agent docs updated
+- [ ] Live checks, if performed, name the client, upstream version and operations exercised
+- [ ] No credentials, tenant identifiers or private service data committed
 
-## Related Issues
+## Notes for reviewers
 
-<!-- Link to related issues: Fixes #123, Closes #456 -->
-
-## Changes Made
-
-<!-- List the specific changes made -->
-
--
--
--
-
-## Testing
-
-- [ ] Tests pass locally (`npm test`)
-- [ ] Lint passes (`npm run lint`)
-- [ ] Type check passes (`npm run typecheck`)
-- [ ] New tests added for new functionality
-- [ ] Manual testing performed (describe below)
-
-## Checklist
-
-- [ ] Code follows the project's coding standards
-- [ ] Commit messages follow Conventional Commits format
-- [ ] Documentation updated (if applicable)
-- [ ] No secrets or credentials committed
+Describe compatibility changes and remaining validation. Keep mocked, live and LLM-mediated evidence distinct.

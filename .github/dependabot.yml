@@ -18,6 +18,9 @@ updates:
         dependency-type: production
         update-types:
           - patch
+    commit-message:
+      prefix: chore
+      include: scope
     labels:
       - dependencies
 
@@ -29,6 +32,9 @@ updates:
       time: '06:00'
       timezone: 'Europe/Amsterdam'
     open-pull-requests-limit: 3
+    commit-message:
+      prefix: chore
+      include: scope
     labels:
       - dependencies
       - github-actions
