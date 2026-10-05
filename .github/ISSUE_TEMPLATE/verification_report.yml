@@ -1,0 +1,31 @@
+name: Verification report
+description: Report the exact client, server and upstream behavior you tested.
+title: '[verify] '
+body:
+  - type: markdown
+    attributes:
+      value: Redact credentials and service data. Report only checks you actually ran.
+  - type: input
+    id: versions
+    attributes:
+      label: Versions and environment
+      description: Server commit, Node version, MCP client/model, upstream version or zone, and account type.
+    validations:
+      required: true
+  - type: dropdown
+    id: transport
+    attributes:
+      label: Transport
+      options:
+        - stdio
+        - Streamable HTTP
+        - Cloudflare Worker scaffold (where available)
+    validations:
+      required: true
+  - type: textarea
+    id: outcome
+    attributes:
+      label: Operations, expected results and observed results
+      description: Include redacted tool inputs/output and explain whether this was a mock or a real service.
+    validations:
+      required: true

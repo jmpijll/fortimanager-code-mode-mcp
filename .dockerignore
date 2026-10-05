@@ -34,3 +34,17 @@ npm-debug.log*
 Dockerfile
 docker-compose.yml
 docker-compose.yaml
+
+# Local credentials, caches and generated verification data
+.env
+.env.*
+node_modules/
+dist/
+.git/
+out/
+.memory/
+.wrangler/
+.wrangler-out/
+coverage/
+*.log
+src/spec/cache/

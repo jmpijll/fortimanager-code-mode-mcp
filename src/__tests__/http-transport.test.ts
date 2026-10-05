@@ -8,6 +8,7 @@
  */
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { readFileSync } from 'node:fs';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js';
 
@@ -129,8 +130,23 @@ describe('startHttpTransport — open endpoint (no auth)', () => {
   it('serves the /health endpoint without going through MCP', async () => {
     const res = await fetch(`http://127.0.0.1:${String(harness.handle.port)}/health`);
     expect(res.status).toBe(200);
-    const body = (await res.json()) as { status: string; stats: { totalRequests: number } };
+    const body = (await res.json()) as {
+      status: string;
+      version: string;
+      stats: { totalRequests: number };
+    };
     expect(body.status).toBe('ok');
+    const packageInfo = JSON.parse(
+      readFileSync(new URL('../../package.json', import.meta.url), 'utf8'),
+    ) as { version: string };
+    const client = new Client({ name: 'version-check', version: '1.0.0' });
+    try {
+      await client.connect(new StreamableHTTPClientTransport(harness.baseUrl));
+      expect(body.version).toBe(packageInfo.version);
+      expect(client.getServerVersion()?.version).toBe(packageInfo.version);
+    } finally {
+      await client.close();
+    }
     expect(body.stats.totalRequests).toBeGreaterThan(0);
   });
 

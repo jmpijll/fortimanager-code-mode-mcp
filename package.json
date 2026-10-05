@@ -25,7 +25,8 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
-    "generate:spec": "tsx scripts/generate-spec.ts"
+    "generate:spec": "tsx scripts/generate-spec.ts",
+    "check": "npm run lint && npm run typecheck && npm test && npm run build"
   },
   "keywords": [
     "fortimanager",
@@ -46,7 +47,7 @@
     "url": "https://github.com/jmpijll/fortimanager-code-mode-mcp/issues"
   },
   "engines": {
-    "node": ">=20.0.0"
+    "node": ">=22.19.0"
   },
   "devDependencies": {
     "@types/node": "^22.0.0",

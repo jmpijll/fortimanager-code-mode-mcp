@@ -8,6 +8,7 @@
  * Each tool accepts JavaScript code as input and runs it in a QuickJS WASM sandbox.
  */
 
+import { SERVER_VERSION } from '../version.js';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
 import type { SearchExecutor } from '../executor/search-executor.js';
@@ -166,7 +167,7 @@ export function createMcpServer(options: CreateServerOptions): McpServer {
   const server = new McpServer(
     {
       name: 'fortimanager-code-mode',
-      version: '1.1.0',
+      version: SERVER_VERSION,
     },
     {
       capabilities: { tools: {} },
