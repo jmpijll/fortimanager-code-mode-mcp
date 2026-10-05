@@ -67,7 +67,7 @@
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.0.0",
     "cheerio": "^1.0.0",
-    "quickjs-emscripten": "^0.31.0",
+    "quickjs-emscripten": "^0.32.0",
     "undici": "^7.22.0",
     "zod": "^3.23.0"
   }
