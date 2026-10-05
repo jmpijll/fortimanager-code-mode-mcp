@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1440" height="420" viewBox="0 0 1440 420" role="img" aria-label="FortiManager Code Mode MCP. Two tools. One API.">
+  <rect width="1440" height="420" rx="28" fill="#222729"/>
+  <g fill="none" stroke="#adb7b9" stroke-opacity=".2" stroke-width="2">
+    <path d="M950 0V420M1090 0V420M1230 0V420M1370 0V420M860 105H1440M860 210H1440M860 315H1440"/>
+    <rect x="968" y="150" width="380" height="120" rx="16" fill="#343b3d" stroke-opacity=".5"/>
+  </g>
+  <g font-family="Segoe UI,Arial,sans-serif">
+    <text x="80" y="98" fill="#adb7b9" font-size="22" letter-spacing="3">FORTIMANAGER / CODE MODE MCP</text>
+    <text x="80" y="205" fill="#f0f2ef" font-size="68" font-weight="600">Two tools.</text>
+    <text x="80" y="285" fill="#b4c0bc" font-size="68">One API.</text>
+    <text x="84" y="365" fill="#9ca9a5" font-size="16" letter-spacing="2">SEARCH / EXECUTE / OPEN SOURCE</text>
+    <text x="1010" y="220" fill="#edf0ed" font-size="30">search → execute</text>
+  </g>
+</svg>

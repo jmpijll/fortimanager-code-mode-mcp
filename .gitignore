@@ -32,3 +32,6 @@ coverage/
 # Logs
 *.log
 npm-debug.log*
+
+# Worker dry-run output
+.wrangler-out/

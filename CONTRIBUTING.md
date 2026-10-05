@@ -6,7 +6,7 @@ Thank you for your interest in contributing! This guide will help you get starte
 
 ### Prerequisites
 
-- **Node.js** 20+ (LTS recommended)
+- **Node.js** 22.19+ (LTS recommended)
 - **npm** 9+
 - **Git**
 
@@ -18,7 +18,7 @@ git clone https://github.com/jmpijll/fortimanager-code-mode-mcp.git
 cd fortimanager-code-mode-mcp
 
 # Install dependencies
-npm install
+npm ci
 
 # Verify the build
 npm run build
@@ -246,3 +246,14 @@ Please report security issues privately. See [SECURITY.md](SECURITY.md) for deta
 ## License
 
 By contributing, you agree that your contributions will be licensed under the [MIT License](LICENSE).
+
+
+## Shared repository conventions
+
+- Use Node.js 22.19+; the lockfile dependencies require this baseline.
+- Install with `npm ci`; `.npmrc` keeps the resolver policy consistent in local, CI and Docker builds.
+- Run `npm run check` before opening a PR: lint, formatting, typecheck, mocked tests and build.
+- Formatting is enforced by `npm run check`; use `npm run format` to apply the shared style.
+- Keep text files in LF format (`.gitattributes`).
+- Keep service-specific API semantics, tool names and sandbox bridges compatible.
+- Record live checks separately from mocked tests; never infer new client or upstream coverage from CI.

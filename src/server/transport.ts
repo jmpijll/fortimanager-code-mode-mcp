@@ -5,6 +5,7 @@
  * the MCP_TRANSPORT environment variable.
  */
 
+import { SERVER_VERSION } from '../version.js';
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
 import { timingSafeEqual } from 'node:crypto';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
@@ -250,7 +251,7 @@ export async function startHttpTransport(
           res.end(
             JSON.stringify({
               status: 'ok',
-              version: '1.0.0',
+              version: SERVER_VERSION,
               uptime: Math.floor((Date.now() - new Date(stats.startedAt).getTime()) / 1000),
               stats: {
                 totalRequests: stats.totalRequests,

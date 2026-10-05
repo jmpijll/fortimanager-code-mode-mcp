@@ -4,7 +4,7 @@ FROM node:22-alpine AS builder
 WORKDIR /app
 
 # Install dependencies first (layer caching)
-COPY package.json package-lock.json ./
+COPY package.json package-lock.json .npmrc ./
 RUN npm ci
 
 # Copy source and compile TypeScript
@@ -31,7 +31,7 @@ RUN addgroup -S mcp && adduser -S mcp -G mcp
 WORKDIR /app
 
 # Install production dependencies only
-COPY package.json package-lock.json ./
+COPY package.json package-lock.json .npmrc ./
 RUN npm ci --omit=dev && npm cache clean --force
 
 # Copy compiled output from builder
