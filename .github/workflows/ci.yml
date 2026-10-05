@@ -16,7 +16,8 @@ permissions:
 
 jobs:
   lint:
-    name: Lint & Format
+    # Keep the Node 22 check name used by existing branch protection.
+    name: ${{ matrix.node == 22 && 'Lint & Format' || format('Lint & Format ({0})', matrix.node) }}
     runs-on: ubuntu-latest
     timeout-minutes: 10
     strategy:
@@ -34,7 +35,7 @@ jobs:
       - run: npm run format:check
 
   typecheck:
-    name: Type Check
+    name: ${{ matrix.node == 22 && 'Type Check' || format('Type Check ({0})', matrix.node) }}
     runs-on: ubuntu-latest
     timeout-minutes: 10
     strategy:
@@ -51,7 +52,7 @@ jobs:
       - run: npm run typecheck
 
   test:
-    name: Tests
+    name: ${{ matrix.node == 22 && 'Tests' || format('Tests ({0})', matrix.node) }}
     runs-on: ubuntu-latest
     timeout-minutes: 10
     strategy:
@@ -68,7 +69,7 @@ jobs:
       - run: npm run test
 
   build:
-    name: Build
+    name: ${{ matrix.node == 22 && 'Build' || format('Build ({0})', matrix.node) }}
     runs-on: ubuntu-latest
     needs: [lint, typecheck, test]
     timeout-minutes: 10
