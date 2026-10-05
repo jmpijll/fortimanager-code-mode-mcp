@@ -65,7 +65,7 @@
     "vitest": "^2.1.0"
   },
   "dependencies": {
-    "@modelcontextprotocol/sdk": "^1.0.0",
+    "@modelcontextprotocol/sdk": "^1.32.0",
     "cheerio": "^1.0.0",
     "quickjs-emscripten": "^0.31.0",
     "undici": "^7.22.0",
