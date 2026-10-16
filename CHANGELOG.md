@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Declare MCP tool annotations for `search` (read-only, idempotent, closed-world) and `execute` (destructive, open-world), letting clients gate confirmation prompts on `readOnlyHint` / `destructiveHint`.
+
 ### Changed
 
 - Enforce consistent formatting and contributor/Dependabot conventions; include linked documentation and artwork in package contents.
