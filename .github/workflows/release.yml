@@ -64,6 +64,21 @@ jobs:
           echo "tag=$TAG" >> "$GITHUB_OUTPUT"
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
 
+      - name: Find previous release tag
+        id: previous
+        run: |
+          TAG="${{ steps.version.outputs.tag }}"
+          # Reachable v* tags only, newest first: a tag from an unrelated
+          # branch must not be used as this release's predecessor.
+          PREV_TAG=$(git tag --sort=-version:refname --merged "$TAG" | grep -E '^v[0-9]' | grep -vxF "$TAG" | head -1 || true)
+          echo "tag=$PREV_TAG" >> "$GITHUB_OUTPUT"
+          if [ -n "$PREV_TAG" ]; then
+            echo "compare=https://github.com/${{ github.repository }}/compare/${PREV_TAG}...${TAG}" >> "$GITHUB_OUTPUT"
+          else
+            # First release: no predecessor exists, so link the tag's history.
+            echo "compare=https://github.com/${{ github.repository }}/commits/${TAG}" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Extract release notes from CHANGELOG
         id: notes
         run: |
@@ -83,7 +98,7 @@ jobs:
           # Fallback to git log if CHANGELOG section not found
           if [ -z "$NOTES" ]; then
             TAG="${{ steps.version.outputs.tag }}"
-            PREV_TAG=$(git tag --sort=-version:refname | grep -v "$TAG" | head -1)
+            PREV_TAG="${{ steps.previous.outputs.tag }}"
             if [ -n "$PREV_TAG" ]; then
               NOTES=$(git log --pretty=format:"- %s (%h)" "$PREV_TAG".."$TAG")
             else
@@ -123,7 +138,7 @@ jobs:
 
             ---
 
-            **Full Changelog**: https://github.com/${{ github.repository }}/compare/...
+            **Full Changelog**: ${{ steps.previous.outputs.compare }}
             
             > **Note**: This server requires locally-generated API spec files. See [README](https://github.com/${{ github.repository }}#important-api-spec-required) for setup instructions.
           prerelease: ${{ steps.prerelease.outputs.is_prerelease }}
@@ -177,6 +192,12 @@ jobs:
         if: steps.published.outputs.exists != 'true'
         env:
           PRERELEASE: ${{ needs.version.outputs.prerelease }}
+          # Fallback for the first release: a trusted publisher can only be
+          # configured once the package exists on npm. npm uses OIDC when the
+          # trusted publisher is configured and falls back to this token
+          # otherwise (see docs/releasing.md). Delete the secret once trusted
+          # publishing is set up.
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
         # Trusted publishing needs npm CLI >= 11.5.1, which Node 22's bundled npm
         # is not. Use an ephemeral npm 11 for this step only, so the repo
         # toolchain stays on the Node 22 defaults.

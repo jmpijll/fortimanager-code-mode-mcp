@@ -8,10 +8,14 @@
 #   SMOKE_PORT         Host port to publish container port 8000 on (default: 8000)
 #   SMOKE_API_VERSION  Spec version / FMG_API_VERSION to use (default: 7.6)
 #
-# The spec fixture is written here because the image ships without specs (they
-# are not redistributable) and is mounted read-only at /app/dist/spec.
+# The minimal spec fixture (scripts/fixtures/minimal-spec.json) is copied into
+# a temp dir because the image ships without specs (they are not
+# redistributable) and is mounted read-only at /app/dist/spec.
 
 set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+FIXTURE="${SCRIPT_DIR}/fixtures/minimal-spec.json"
 
 IMAGE="${1:-fmg-mcp:smoke}"
 CONTAINER="fmg-mcp-smoke-$$"
@@ -33,22 +37,7 @@ fail() {
   exit 1
 }
 
-cat > "$SPEC_FILE" <<'JSON'
-{
-  "version": "0.0.0-smoke",
-  "build": "0",
-  "generatedAt": "1970-01-01T00:00:00.000Z",
-  "modules": [
-    {
-      "name": "sys",
-      "title": "System",
-      "methods": [],
-      "objects": []
-    }
-  ],
-  "errors": []
-}
-JSON
+cp "$FIXTURE" "$SPEC_FILE"
 
 # `mktemp -d` creates a 0700 dir; on Linux bind mounts keep those modes, and the
 # container runs as the non-root `mcp` user, which then cannot read the fixture.
