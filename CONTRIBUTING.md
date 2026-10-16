@@ -181,7 +181,7 @@ Follow [Conventional Commits](https://www.conventionalcommits.org/):
 ```
 feat(client): add JSON-RPC request multiplexing
 fix(executor): increase QuickJS memory limit to 32MB
-chore(deps): update @modelcontextprotocol/sdk to 1.2.0
+chore(deps): update @modelcontextprotocol/server to 2.4.0
 docs: add architecture diagram to README
 ```
 

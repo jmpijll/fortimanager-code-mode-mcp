@@ -175,6 +175,28 @@ const resp = await fortimanager.request("get", [{ url: "/sys/status" }]);
 
 ---
 
+## MCP Protocol Issues
+
+### `406 Not Acceptable: Client must accept both application/json and text/event-stream`
+
+**Cause**: A Streamable HTTP `POST /mcp` request must accept both response types — JSON and SSE.
+
+**Solution**: Send `Accept: application/json, text/event-stream` on every request to `/mcp`. MCP SDK clients do this for you.
+
+### `Invalid params: the MCP-Protocol-Version header names protocol revision 2026-07-28 ...`
+
+**Cause**: A hand-written request claims the 2026-07-28 revision through the `MCP-Protocol-Version` header but is missing the per-request `_meta` envelope (`io.modelcontextprotocol/protocolVersion`, `io.modelcontextprotocol/clientInfo`, `io.modelcontextprotocol/clientCapabilities`).
+
+**Solution**: Use an MCP client of revision 2026-07-28, or drop the header — requests without it take the 2025-era `initialize` path. Hand-written requests that claim the header must carry the full envelope in `params._meta`.
+
+### `Unsupported protocol version` on a modern client
+
+**Cause**: The client pins a revision the server does not serve. This server serves protocol revision 2026-07-28 and the 2025-era handshake (2025-11-25, 2025-06-18, 2025-03-26, 2024-11-05, 2024-10-07).
+
+**Solution**: Pin 2026-07-28 or leave version negotiation at its default. No server configuration selects an era.
+
+---
+
 ## Docker Issues
 
 ### Health Check Failing

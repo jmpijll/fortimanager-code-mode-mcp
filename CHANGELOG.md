@@ -34,6 +34,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Upgrade the development toolchain to current majors: ESLint 10 with flat config (replacing the legacy `.eslintrc.cjs`), `typescript-eslint` 8 via the meta package, Vitest 5 with V8 coverage and Vite 8, TypeScript 6, Prettier 3.9, tsx 4.23 and dotenv 18. This also clears the remaining dev-only `npm audit` findings.
 - Build the Docker image on Node.js 24 (current LTS); the runtime requirement for users stays Node.js 22.19+.
 - The npm publish step accepts a granular `NPM_TOKEN` fallback (`NODE_AUTH_TOKEN`) so a first release can publish before a trusted publisher can be configured; npm prefers OIDC when it is available.
+- Upgrade `undici` 7.30.1 → 8.11.2 and route `FMG_VERIFY_SSL=false` requests through undici's own `fetch`, so the TLS-bypass `Agent` and `fetch` always come from the same undici version — the mixed pair failed with `invalid onRequestStart method`.
+- Upgrade `quickjs-emscripten` 0.31.0 → 0.32.0 and fix sandbox disposal: free the runtime before deregistering its callbacks (upstream [quickjs-emscripten#256](https://github.com/justjake/quickjs-emscripten/pull/256), not yet released) and stop double-disposing promise result handles, which made every promise-returning execution fail with `Lifetime not alive` on both 0.31 and 0.32.
+- Move the MCP server to the TypeScript SDK v2 packages (`@modelcontextprotocol/server` and `@modelcontextprotocol/node`) and to `zod` 4. The server speaks protocol revision 2026-07-28 and still answers 2025-era clients (2025-11-25 and earlier) on the same endpoints, with no new configuration and no route changes.
+- `tools/list` and `server/discover` results carry `ttlMs: 300000` and `cacheScope: "public"` hints on the 2026-07-28 revision, so clients can cache tool definitions for five minutes and pick up new tool text on the next refresh.
+
+### Removed
+
+- Drop the `@modelcontextprotocol/sdk` dependency; the v2 packages replace it.
 
 ### Fixed
 

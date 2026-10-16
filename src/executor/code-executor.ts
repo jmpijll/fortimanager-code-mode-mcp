@@ -15,6 +15,7 @@ import {
 } from 'quickjs-emscripten';
 import type { FmgClient } from '../client/fmg-client.js';
 import type { FmgRequestParams } from '../client/types.js';
+import { restoreRuntimeDisposalOrder } from './quickjs-compat.js';
 import {
   DEFAULT_EXECUTOR_OPTIONS,
   type ExecuteResult,
@@ -77,6 +78,7 @@ export class CodeExecutor {
     // Create an isolated async context (separate WASM module)
     const context = await newAsyncContext();
     const runtime = context.runtime;
+    restoreRuntimeDisposalOrder(runtime);
 
     try {
       // Configure resource limits
@@ -97,7 +99,8 @@ export class CodeExecutor {
 
       if (result.error) {
         const errorValue: unknown = context.dump(result.error);
-        result.error.dispose();
+        // dump() consumes promise handles, so the error may already be disposed
+        if (result.error.alive) result.error.dispose();
 
         return {
           ok: false,
@@ -108,7 +111,8 @@ export class CodeExecutor {
       }
 
       const value: unknown = context.dump(result.value);
-      result.value.dispose();
+      // dump() consumes promise handles, so the value may already be disposed
+      if (result.value.alive) result.value.dispose();
 
       return {
         ok: true,

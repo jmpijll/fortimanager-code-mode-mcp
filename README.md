@@ -27,6 +27,7 @@ API calls go through the host; credentials remain outside the sandbox.
 - **Search the reference.** Find objects, attributes, URLs, methods and error codes.
 - **Call JSON-RPC.** Use `fortimanager.request()` with FortiManager 7.4 or 7.6.
 - **Choose a transport.** Stdio for local clients; Streamable HTTP for hosted use.
+- **Speak both protocol eras.** Serves the 2026-07-28 protocol revision and still answers 2025-era clients, with no configuration.
 - **Keep credentials on the host.** Optional HTTP Bearer auth and per-request `X-FMG-Token` passthrough.
 
 The `execute` tool is marked potentially destructive in its MCP annotations, so clients can use that when deciding whether to ask for confirmation.

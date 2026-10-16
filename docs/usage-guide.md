@@ -406,6 +406,7 @@ claims that live services or clients were retested in this change.
 - **Dual API version support** — Spec generator supports FortiManager 7.4.x and 7.6.x
 - **QuickJS WASM sandbox** — Memory/CPU-limited code execution with no host access
 - **Dual transport** — Stdio (for Claude Desktop / local dev) and Streamable HTTP (for Docker / production)
+- **Both protocol eras** — Serves protocol revision 2026-07-28 and still answers 2025-era clients (2025-11-25 and earlier) on the same endpoints, with no configuration
 - **Docker-ready** — Multi-stage Node.js 24 Alpine build with health checks
 - **Tested against live FortiManager** — 152 tests (66 unit + 86 integration) passing against FMG v7.6.6
 - **Security hardened** — HTTP timeout, response validation, sandbox method/params validation, log caps, code size limits
@@ -730,7 +731,7 @@ Add to your Claude Desktop configuration (`claude_desktop_config.json`):
 # Install dependencies
 npm ci
 
-# Run unit tests (92 tests across 6 files)
+# Run unit tests
 npm test
 
 # Run integration tests against a live FortiManager (requires .env)
@@ -765,15 +766,15 @@ src/
 │   ├── executor.ts   # Base executor (lifecycle, console capture, limits)
 │   ├── search-executor.ts  # Spec index + getObject() injection
 │   └── code-executor.ts    # fortimanager.request() proxy (async)
-├── server/           # MCP server and transport
+├── server/           # MCP server and HTTP edge
 │   ├── server.ts     # McpServer with search + execute tools
-│   └── transport.ts  # Stdio + Streamable HTTP transports
+│   └── http.ts       # HTTP edge (health, rate limit, auth) + node listener
 ├── spec/             # Generated API spec JSON files (git-ignored, generated locally)
 │   ├── fmg-api-spec-7.4.json  # 72 modules, 17,426 objects, 38,586 URLs
 │   └── fmg-api-spec-7.6.json  # 82 modules, 22,060 objects, 49,285 URLs
 ├── types/            # Shared type definitions
 ├── config.ts         # Zod-validated environment config
-├── __tests__/        # Unit tests (92 tests across 6 files)
+├── __tests__/        # Unit tests
 │   └── fixtures/     # Sample spec, response builders
 └── index.ts          # Entry point
 scripts/

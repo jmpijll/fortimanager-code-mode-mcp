@@ -38,7 +38,7 @@ Follow [Conventional Commits](https://www.conventionalcommits.org/):
 ```
 feat(client): add JSON-RPC request multiplexing
 fix(executor): increase QuickJS memory limit to 32MB
-chore(deps): update @modelcontextprotocol/sdk to 1.2.0
+chore(deps): update @modelcontextprotocol/server to 2.4.0
 docs: add architecture diagram to README
 ```
 
@@ -87,9 +87,9 @@ src/
 │   ├── executor.ts
 │   ├── search-executor.ts
 │   └── code-executor.ts
-├── server/         # MCP server and transport
+├── server/         # MCP server and HTTP edge
 │   ├── server.ts
-│   └── transport.ts
+│   └── http.ts
 ├── types/          # Shared type definitions
 │   ├── fmg-request-types.ts
 │   └── spec-types.ts
