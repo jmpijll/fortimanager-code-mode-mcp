@@ -6,6 +6,8 @@
  */
 
 import { describe, it, expect, vi } from 'vitest';
+import { Client } from '@modelcontextprotocol/sdk/client/index.js';
+import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js';
 import { createMcpServer, type CreateServerOptions } from '../server/server.js';
 import { SearchExecutor } from '../executor/search-executor.js';
 import { CodeExecutor } from '../executor/code-executor.js';
@@ -128,5 +130,47 @@ describe('result formatting', () => {
     expect(result.data).toBe(3);
     expect(result.logs).toHaveLength(1);
     expect(result.logs[0]!.message).toBe('searching...');
+  });
+});
+
+describe('tool annotations', () => {
+  async function listToolsAsClient() {
+    const server = createMcpServer(createTestOptions());
+    const client = new Client({ name: 'annotations-client', version: '1.0.0' });
+    const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
+
+    await Promise.all([client.connect(clientTransport), server.connect(serverTransport)]);
+    const { tools } = await client.listTools();
+
+    await client.close();
+    await server.close();
+
+    return tools;
+  }
+
+  it('exposes search as read-only and not destructive', async () => {
+    const tools = await listToolsAsClient();
+    const search = tools.find((tool) => tool.name === 'search');
+
+    expect(search).toBeDefined();
+    expect(search!.annotations).toEqual({
+      readOnlyHint: true,
+      destructiveHint: false,
+      idempotentHint: true,
+      openWorldHint: false,
+    });
+  });
+
+  it('exposes execute as destructive and open-world', async () => {
+    const tools = await listToolsAsClient();
+    const execute = tools.find((tool) => tool.name === 'execute');
+
+    expect(execute).toBeDefined();
+    expect(execute!.annotations).toEqual({
+      readOnlyHint: false,
+      destructiveHint: true,
+      idempotentHint: false,
+      openWorldHint: true,
+    });
   });
 });
