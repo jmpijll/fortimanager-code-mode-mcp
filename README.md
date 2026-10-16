@@ -165,6 +165,7 @@ architectural invariants. Live API tests require separate credentials and verifi
 
 - [Usage and client setup](docs/usage-guide.md)
 - [Architecture](docs/architecture.md)
+- [Releasing](docs/releasing.md)
 - [Changelog](CHANGELOG.md)
 
 ## License and acknowledgements

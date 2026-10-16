@@ -235,63 +235,8 @@ The generated specs and HTML docs are git-ignored. After generating, run `npm ru
 
 ## Releasing
 
-Releases are cut by pushing a `v<version>` tag (for example `v1.2.0`). The tag must
-match the `version` field in `package.json`; the release workflow fails otherwise.
-`.github/workflows/release.yml` then runs CI, creates the GitHub Release from the
-matching `CHANGELOG.md` section, publishes the package to npm, and pushes the
-multi-arch image to `ghcr.io/jmpijll/fortimanager-code-mode-mcp` (tags `x.y.z`,
-`x.y`, `x`, `latest`; 0.x releases omit the bare `x` tag).
-
-npm publishing uses [trusted publishing](https://docs.npmjs.com/trusted-publishers)
-(OIDC), so no `NPM_TOKEN` secret is configured. Trusted publishing needs npm CLI
-11.5.1 or newer; the publish job runs `npx npm@^11.5.1` because Node 22's bundled
-npm is older.
-
-Prereleases — a version with a suffix (`v1.2.0-rc.1`) or a `0.x` version — publish
-to the npm `next` tag and do not move GHCR's `latest`.
-
-If a release run fails partway, prefer GitHub's **Re-run failed jobs** over re-running
-every job from scratch: the npm job skips a version that is already published and GHCR
-pushes overwrite the same tags, so a full re-run also converges, but re-running the
-jobs that already succeeded only wastes CI time.
-
-### One-time npm trusted publisher setup
-
-Trusted publishers are configured on the published package page, so the package
-must exist on npm first:
-
-1. If the package has never been published, publish it once by hand from a trusted
-   machine with two-factor authentication enabled:
-
-   ```bash
-   npm ci
-   npm run build
-   npm pack --dry-run   # inspect the file list: dist/ plus README, LICENSE, CHANGELOG
-   npm publish --access public
-   ```
-
-   Do not pass `--provenance` for this manual publish; npm only supports provenance
-   on supported CI runners, which the release workflow provides. The next automated
-   `v*` release must use a new version, because this manual publish has taken the
-   current one.
-2. On npmjs.com open **Packages** -> `fortimanager-code-mode-mcp` -> **Settings** ->
-   **Trusted publishing** -> **Add trusted publisher** -> **GitHub Actions** and set:
-   - Organization or user: `jmpijll`
-   - Repository: `fortimanager-code-mode-mcp`
-   - Workflow filename: `release.yml` (the filename only, with `.yml`)
-   - Environment name: leave empty
-   - Allowed actions: enable **npm publish** (configurations created after
-     2026-09-03 allow only staged publishing by default, which this workflow does
-     not use)
-3. Cut the next `v*` release within 2 days: a new trusted publisher configuration
-   must complete its first successful publish within 2 days or it expires and has
-   to be created again.
-4. Optional hardening: under **Settings** -> **Publishing access**, select
-   "Require two-factor authentication and disallow tokens".
-
-The workflow publishes with `--provenance`, so releases carry a build provenance
-attestation; npm also generates provenance automatically for OIDC publishes from
-public repositories.
+Release steps, the one-time npm trusted publisher setup, the GHCR package
+settings, and the local dry runs live in [docs/releasing.md](docs/releasing.md).
 
 ## Reporting Bugs
 
