@@ -336,9 +336,7 @@ function parseObjectsHtml($: cheerio.CheerioAPI): FmgObjectDef[] {
     const typeMatch = h2Text.match(/^(.+?)\s*\((table|object|command)\)\s*$/i);
     const objName = typeMatch ? typeMatch[1]!.trim() : h2Text;
     const objType = (typeMatch ? typeMatch[2]!.toLowerCase() : 'object') as
-      | 'table'
-      | 'object'
-      | 'command';
+      'table' | 'object' | 'command';
 
     // Description — first <p> that doesn't start with "Supported methods:"
     let description = '';

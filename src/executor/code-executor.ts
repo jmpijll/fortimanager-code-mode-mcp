@@ -252,7 +252,7 @@ export class CodeExecutor {
           return parsed.value;
         } catch (err: unknown) {
           const message = err instanceof Error ? err.message : String(err);
-          throw new Error(message);
+          throw new Error(message, { cause: err });
         }
       },
     );
@@ -289,6 +289,7 @@ function stringifyValue(value: unknown): string {
   try {
     return JSON.stringify(value);
   } catch {
-    return typeof value === 'object' ? '[object]' : String(value as string);
+    // JSON.stringify only throws for BigInt values and circular structures
+    return typeof value === 'bigint' ? value.toString() : '[object]';
   }
 }
