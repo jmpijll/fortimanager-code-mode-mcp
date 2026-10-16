@@ -205,12 +205,6 @@ export function createHttpApp(opts: HttpAppOptions): HttpApp {
   }, 300_000);
   cleanupInterval.unref(); // Don't prevent process exit
 
-  const json = (status: number, body: unknown, headers?: Record<string, string>): Response =>
-    new Response(JSON.stringify(body), {
-      status,
-      headers: { 'Content-Type': 'application/json', ...headers },
-    });
-
   let closed = false;
 
   const admit = (head: Request, peer: Peer): Response | undefined => {
@@ -325,7 +319,18 @@ function headRequest(req: IncomingMessage): Request {
 }
 
 /**
- * Write a gate response straight to the socket. The request body is never
+ * A small JSON response, shared by the edge and the listener so every early
+ * answer carries the same `Content-Type`.
+ */
+function json(status: number, body: unknown, headers?: Record<string, string>): Response {
+  return new Response(JSON.stringify(body), {
+    status,
+    headers: { 'Content-Type': 'application/json', ...headers },
+  });
+}
+
+/**
+ * Write an early response straight to the socket. The request body is never
  * read, and `Connection: close` stops a half-sent body from pinning the
  * connection after the answer is out.
  */
@@ -337,6 +342,17 @@ async function writeGateResponse(res: ServerResponse, response: Response): Promi
 
   res.writeHead(response.status, { ...headers, Connection: 'close' });
   res.end(await response.text());
+}
+
+/**
+ * Report a throw from the adapter to the logger, unless the adapter already
+ * answered the request — then there is nothing left to say and no response to
+ * write. Returns true when the error has been handled.
+ */
+function reportAdapterError(res: ServerResponse, logger: Logger, err: unknown): boolean {
+  if (res.headersSent) return true;
+  logger.error('HTTP handler error:', err);
+  return false;
 }
 
 /**
@@ -355,11 +371,13 @@ export function listenHttp(
     try {
       gate = app.admit(headRequest(req), peer);
     } catch (err: unknown) {
-      // A request the edge cannot even build a head from (bad URL, forbidden
-      // method) never reaches the SDK; answer it like node:http used to.
+      // The request head is unusable (a malformed `Host`, for example), so the
+      // caller is at fault. Answer like the other early responses, and close
+      // the connection so an unfinished body cannot keep the socket open.
       at.logger.error('HTTP handler error:', err);
-      res.writeHead(500, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({ error: 'Internal server error' }));
+      void writeGateResponse(res, json(400, { error: 'Bad request' })).catch((e: unknown) => {
+        at.logger.error('HTTP handler error:', e);
+      });
       return;
     }
 
@@ -370,11 +388,21 @@ export function listenHttp(
       return;
     }
 
-    const handler = toNodeHandler({
-      fetch: (request) => app.serve(request, peer),
-    });
+    // The adapter answers 500 itself for a throw from `app.serve` or from the
+    // request conversion, so `onerror` is the only place those errors surface.
+    // The wrapper below covers the rarer throw between that answer and
+    // `res.end`.
+    const handler = toNodeHandler(
+      { fetch: (request) => app.serve(request, peer) },
+      { onerror: (error) => at.logger.error('HTTP handler error:', error) },
+    );
     void handler(req, res).catch((err: unknown) => {
-      at.logger.error('HTTP handler error:', err);
+      if (reportAdapterError(res, at.logger, err)) return;
+      void writeGateResponse(res, json(500, { error: 'Internal server error' })).catch(
+        (e: unknown) => {
+          at.logger.error('HTTP handler error:', e);
+        },
+      );
     });
   });
 

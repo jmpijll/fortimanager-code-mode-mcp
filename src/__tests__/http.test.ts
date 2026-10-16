@@ -9,7 +9,8 @@
  * - Over a real socket: `listenHttp(app, { port: 0 })` + a v2 `Client` covers
  *   the full handshake (legacy and modern era) and `X-FMG-Token` passthrough
  *   down to the mocked FortiManager client. Raw requests with an unfinished
- *   body pin down that every gate decides before that body is read.
+ *   body pin down that every gate decides before that body is read, and raw
+ *   requests with an unusable head pin down the 400 that answers them.
  *
  * The sequential-clients test guards
  * https://github.com/jmpijll/fortimanager-code-mode-mcp/issues/13: every
@@ -49,6 +50,28 @@ const silentLogger: Logger = {
     /* noop */
   },
 };
+
+interface RecordingLogger {
+  logger: Logger;
+  /** `logger.error` calls, each as the message plus the arguments it got. */
+  errors: Array<[string, ...unknown[]]>;
+}
+
+/** A logger that records the `error` calls, for tests that assert reporting. */
+function recordingLogger(): RecordingLogger {
+  const errors: Array<[string, ...unknown[]]> = [];
+  return {
+    errors,
+    logger: {
+      info: (): void => {
+        /* noop */
+      },
+      error: (msg: string, ...args: unknown[]): void => {
+        errors.push([msg, ...args]);
+      },
+    },
+  };
+}
 
 const EXECUTOR_OPTIONS = { timeoutMs: 5_000, maxMemoryBytes: 16 * 1024 * 1024 };
 
@@ -120,11 +143,15 @@ function probeRawResponse(port: number, requestBytes: string, timeoutMs = 500): 
   });
 }
 
-/** Head of a `POST` whose declared two-byte body is only half sent. */
-function partialBodyHead(path: string, headers: string[] = []): string {
+/**
+ * Head of a `POST` whose declared two-byte body is only half sent. `host`
+ * defaults to the loopback address; a malformed one exercises the listener's
+ * own head construction.
+ */
+function partialBodyHead(path: string, headers: string[] = [], host = '127.0.0.1'): string {
   return [
     `POST ${path} HTTP/1.1`,
-    'Host: 127.0.0.1',
+    `Host: ${host}`,
     'Content-Type: application/json',
     'Content-Length: 2',
     ...headers,
@@ -472,6 +499,22 @@ describe('listenHttp — gate responses before the request body', () => {
     expect(response).toContain('{"error":"Not found"}');
   });
 
+  it('answers 400 and closes the connection on a malformed Host with an unfinished body', async () => {
+    const { logger, errors } = recordingLogger();
+    const { baseUrl } = await makeListener({ logger });
+
+    // `probeRawResponse` only resolves when the server ends the exchange, so a
+    // 400 that kept the connection alive would time out instead.
+    const response = await probeRawResponse(Number(baseUrl.port), partialBodyHead('/mcp', [], '['));
+
+    expect(response).toMatch(/^HTTP\/1\.1 400 /);
+    expect(response).toContain('{"error":"Bad request"}');
+    expect(response.toLowerCase()).toContain('connection: close');
+    expect(errors).toHaveLength(1);
+    expect(errors[0]?.[0]).toBe('HTTP handler error:');
+    expect(String(errors[0]?.[1])).toContain('Failed to parse URL');
+  });
+
   it('challenges an unauthenticated oversized body instead of returning 413', async () => {
     const { baseUrl } = await makeListener({ apiKey: API_KEY });
     const response = await probeRawResponse(Number(baseUrl.port), oversizedBodyHead('/mcp'));
@@ -488,6 +531,40 @@ describe('listenHttp — gate responses before the request body', () => {
     );
 
     expect(response).toMatch(/^HTTP\/1\.1 413 /);
+  });
+});
+
+// ─── Handler failures (real socket) ─────────────────────────────────
+
+describe('listenHttp — MCP handler failures', () => {
+  it('answers 500 and reports the error through the logger when serve throws', async () => {
+    const { logger, errors } = recordingLogger();
+    const { app } = makeApp({ logger });
+    // A closed handler rejects every request: the adapter's own error path,
+    // which nothing above it can observe unless the listener passes `onerror`.
+    await app.close();
+
+    const listener = await listenHttp(app, { port: 0, host: '127.0.0.1', logger });
+    openListeners.push(listener);
+
+    const res = await fetch(`http://127.0.0.1:${String(listener.port)}/mcp`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Accept: 'application/json, text/event-stream',
+      },
+      body: JSON.stringify(INITIALIZE_2025),
+    });
+
+    expect(res.status).toBe(500);
+    expect(await res.json()).toEqual({
+      jsonrpc: '2.0',
+      error: { code: -32603, message: 'Internal server error' },
+      id: null,
+    });
+    expect(errors).toHaveLength(1);
+    expect(errors[0]?.[0]).toBe('HTTP handler error:');
+    expect(errors[0]?.[1]).toHaveProperty('message', 'This MCP handler has been closed');
   });
 });
 

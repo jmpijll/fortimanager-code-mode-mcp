@@ -58,7 +58,7 @@ Supports two transport modes:
 Both transports serve protocol revision **2026-07-28** and still answer 2025-era clients with the plain `initialize` handshake. Nothing selects an era: the server reads it from the client's first request. On the modern era, `tools/list` and `server/discover` results carry 5-minute public cache hints.
 
 HTTP transport includes:
-- Header-first gates: `/health`, the 429 and the 401 are decided from the method, path and headers alone (`HttpApp.admit`) before any request body is read, so an unauthenticated or rate-limited caller is answered without uploading its body; an admitted `/mcp` call then goes through `HttpApp.serve` to the SDK adapter, which reads the body itself under its 4 MiB cap
+- Header-first gates: `/health`, the 429 and the 401 are decided from the method, path and headers alone (`HttpApp.admit`) before any request body is read, so an unauthenticated or rate-limited caller is answered without uploading its body; an admitted `/mcp` call then goes through `HttpApp.serve` to the SDK adapter, which reads the body itself under its 4 MiB cap. A request whose head cannot even be parsed (a malformed `Host`, for example) is answered 400 with `Connection: close`
 - Rate limiting (60 req/min per client IP, sliding window)
 - Request logging with client IP tracking
 - Optional static Bearer auth (`MCP_API_KEY`) and per-request `X-FMG-Token` passthrough
