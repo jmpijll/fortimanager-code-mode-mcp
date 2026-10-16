@@ -51,9 +51,10 @@ export interface HttpApp {
   admit: (head: Request, peer: Peer) => Response | undefined;
   /**
    * Run an admitted `/mcp` request through the MCP handler. The request body
-   * belongs to the SDK adapter, which reads (and caps) it itself.
+   * belongs to the SDK adapter, which reads (and caps) it itself. `peer` is
+   * the address the gate saw — a `Request` has no socket of its own.
    */
-  serve: (request: Request) => Promise<Response>;
+  serve: (request: Request, peer: Peer) => Promise<Response>;
   /** `admit` then `serve` — one entry point for socket-free callers. */
   fetch: (request: Request, peer: Peer) => Promise<Response>;
   close: () => Promise<void>;
@@ -176,16 +177,6 @@ function callerFrom(request: Request | undefined, passthrough: boolean): CallerS
   return fmgToken ? { fmgToken } : {};
 }
 
-/**
- * Best-effort caller label for the `serve` log lines. The socket address is
- * known only to the gate, so these lines reuse the limiter's first-hop
- * `X-Forwarded-For` rule and fall back to `unknown`.
- */
-function forwardedIp(request: Request): string {
-  const forwarded = request.headers.get('x-forwarded-for');
-  return forwarded?.split(',')[0]?.trim() ?? 'unknown';
-}
-
 // ─── HTTP App ───────────────────────────────────────────────────────
 
 /**
@@ -279,14 +270,14 @@ export function createHttpApp(opts: HttpAppOptions): HttpApp {
     return undefined;
   };
 
-  const serve = async (request: Request): Promise<Response> => {
+  const serve = async (request: Request, peer: Peer): Promise<Response> => {
     const startTime = Date.now();
     const method = request.method;
 
     stats.mcpRequests++;
     const passthroughToken = opts.tokenPassthrough ? request.headers.get('x-fmg-token') : null;
     opts.logger.info(
-      `MCP ${method} from ${forwardedIp(request)}${passthroughToken ? ' [token=passthrough]' : ''}`,
+      `MCP ${method} from ${peer.ip}${passthroughToken ? ' [token=passthrough]' : ''}`,
     );
     const response = await mcp.fetch(request);
     opts.logger.info(`MCP ${method} completed in ${String(Date.now() - startTime)}ms`);
@@ -295,7 +286,7 @@ export function createHttpApp(opts: HttpAppOptions): HttpApp {
 
   const fetch = async (request: Request, peer: Peer): Promise<Response> => {
     try {
-      return admit(request, peer) ?? (await serve(request));
+      return admit(request, peer) ?? (await serve(request, peer));
     } catch (err: unknown) {
       stats.errors++;
       opts.logger.error('HTTP handler error:', err);
@@ -352,19 +343,21 @@ async function writeGateResponse(res: ServerResponse, response: Response): Promi
  * Bind the app to a node:http server. Each request is gated from its head
  * first; only an admitted `/mcp` request reaches the adapter, which then
  * reads the body and owns the response stream (keeping SSE backpressure).
+ * `logger` receives the failures that never reach `app.fetch`.
  */
 export function listenHttp(
   app: HttpApp,
-  at: { port: number; host?: string },
+  at: { port: number; host?: string; logger: Logger },
 ): Promise<HttpListener> {
   const httpServer = createServer((req, res) => {
+    const peer: Peer = { ip: getClientIp(req) };
     let gate: Response | undefined;
     try {
-      gate = app.admit(headRequest(req), { ip: getClientIp(req) });
+      gate = app.admit(headRequest(req), peer);
     } catch (err: unknown) {
       // A request the edge cannot even build a head from (bad URL, forbidden
       // method) never reaches the SDK; answer it like node:http used to.
-      console.error('[ERROR] HTTP handler error:', err);
+      at.logger.error('HTTP handler error:', err);
       res.writeHead(500, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify({ error: 'Internal server error' }));
       return;
@@ -372,16 +365,16 @@ export function listenHttp(
 
     if (gate) {
       void writeGateResponse(res, gate).catch((err: unknown) => {
-        console.error('[ERROR] HTTP handler error:', err);
+        at.logger.error('HTTP handler error:', err);
       });
       return;
     }
 
     const handler = toNodeHandler({
-      fetch: (request) => app.serve(request),
+      fetch: (request) => app.serve(request, peer),
     });
     void handler(req, res).catch((err: unknown) => {
-      console.error('[ERROR] HTTP handler error:', err);
+      at.logger.error('HTTP handler error:', err);
     });
   });
 

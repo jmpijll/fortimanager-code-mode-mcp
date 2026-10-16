@@ -224,7 +224,7 @@ async function main(): Promise<void> {
       tokenPassthrough: config.mcpTokenPassthrough,
       logger,
     });
-    const listener = await listenHttp(app, { port: config.mcpHttpPort });
+    const listener = await listenHttp(app, { port: config.mcpHttpPort, logger });
     logger.info(`MCP HTTP server listening on port ${String(listener.port)}`);
     logger.info(`  Health:  http://localhost:${String(listener.port)}/health`);
     logger.info(`  MCP:     http://localhost:${String(listener.port)}/mcp`);

@@ -152,6 +152,7 @@ interface AppOptions {
   apiKey?: string;
   tokenPassthrough?: boolean;
   rateLimit?: { windowMs: number; max: number };
+  logger?: Logger;
 }
 
 interface AppHarness {
@@ -183,7 +184,7 @@ function makeApp(opts: AppOptions = {}): AppHarness {
     deps: { searchExecutor, codeExecutor, specVersion: '7.6' },
     apiKey: opts.apiKey,
     tokenPassthrough: opts.tokenPassthrough ?? false,
-    logger: silentLogger,
+    logger: opts.logger ?? silentLogger,
     rateLimit: opts.rateLimit,
   });
   openApps.push(app);
@@ -198,7 +199,11 @@ interface ListenerHarness extends AppHarness {
 async function makeListener(opts: AppOptions = {}): Promise<ListenerHarness> {
   const harness = makeApp(opts);
   // Bind to loopback so a test run never exposes a public port.
-  const listener = await listenHttp(harness.app, { port: 0, host: '127.0.0.1' });
+  const listener = await listenHttp(harness.app, {
+    port: 0,
+    host: '127.0.0.1',
+    logger: opts.logger ?? silentLogger,
+  });
   openListeners.push(listener);
 
   return { ...harness, baseUrl: new URL(`http://127.0.0.1:${String(listener.port)}/mcp`) };
@@ -316,6 +321,26 @@ describe('createHttpApp — routing without a socket', () => {
     });
 
     expect(res.status).toBe(406);
+  });
+
+  it('logs the peer IP rather than a spoofable X-Forwarded-For header', async () => {
+    const lines: string[] = [];
+    const logger: Logger = {
+      info: (msg: string): void => {
+        lines.push(msg);
+      },
+      error: (): void => {
+        /* noop */
+      },
+    };
+    const { app } = makeApp({ logger });
+
+    const res = await app.fetch(mcpPost(INITIALIZE_2025, { 'X-Forwarded-For': '203.0.113.9' }), {
+      ip: '10.0.0.1',
+    });
+
+    expect(res.status).toBe(200);
+    expect(lines).toContain('MCP POST from 10.0.0.1');
   });
 });
 
