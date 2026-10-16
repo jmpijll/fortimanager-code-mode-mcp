@@ -109,3 +109,19 @@ jobs:
           sbom: false
       - name: Smoke test image
         run: ./scripts/docker-smoke.sh fmg-mcp:ci
+
+  pack-smoke:
+    # Drives the packed tarball through the MCP handshake and an isolated npx
+    # resolution check. release.yml reuses this workflow, so packaging
+    # regressions fail the release before anything is published.
+    name: Package Smoke
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: ./scripts/pack-smoke.sh
