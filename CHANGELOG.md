@@ -7,7 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-## [1.2.0] — 2026-10-16
+## [2.0.0] — 2026-10-16
+
+### Breaking
+
+- Node.js 22.19 or newer is now required. v1.1.0 declared `engines.node >=20.0.0`; Node.js 20 reached end of life on 2026-04-30.
 
 ### Added
 
@@ -16,6 +20,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - CI builds the Docker image on every pull request and smoke-tests it (health endpoint plus an MCP `initialize` request) with a minimal spec fixture mounted at runtime.
 - [`docs/releasing.md`](docs/releasing.md) documents the release pipeline and the one-time npm trusted publishing setup for releases.
 - `scripts/pack-smoke.sh` verifies the packed tarball by installing it into a fresh project and driving the MCP `initialize` / `tools/list` handshake over stdio from both the `npx` entry point and the installed bin.
+- A `Package Smoke` CI job runs `scripts/pack-smoke.sh` on every pull request and release, so a broken npm package fails the build before it can reach the registry.
 
 ### Changed
 
@@ -142,8 +147,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Graceful shutdown** for both stdio and HTTP transports with signal deduplication
 - **Startup health check** validates FortiManager connectivity at boot
 
-[Unreleased]: https://github.com/jmpijll/fortimanager-code-mode-mcp/compare/v1.2.0...HEAD
-[1.2.0]: https://github.com/jmpijll/fortimanager-code-mode-mcp/compare/v1.1.0...v1.2.0
+[Unreleased]: https://github.com/jmpijll/fortimanager-code-mode-mcp/compare/v2.0.0...HEAD
+[2.0.0]: https://github.com/jmpijll/fortimanager-code-mode-mcp/compare/v1.1.0...v2.0.0
 [1.1.0]: https://github.com/jmpijll/fortimanager-code-mode-mcp/compare/v1.0.2...v1.1.0
 [1.0.2]: https://github.com/jmpijll/fortimanager-code-mode-mcp/compare/v1.0.1...v1.0.2
 [1.0.1]: https://github.com/jmpijll/fortimanager-code-mode-mcp/compare/v1.0.0...v1.0.1

@@ -14,7 +14,7 @@
   <a href="CONTRIBUTING.md">Contribute</a>
 </p>
 
-<p align="center">Node.js 22.19+ · Stable · v1.2.0 · MIT license</p>
+<p align="center">Node.js 22.19+ · Stable · v2.0.0 · MIT license</p>
 
 [![CI](https://github.com/jmpijll/fortimanager-code-mode-mcp/actions/workflows/ci.yml/badge.svg)](https://github.com/jmpijll/fortimanager-code-mode-mcp/actions/workflows/ci.yml)
 
@@ -139,7 +139,7 @@ identify the server revision, client, upstream version and operations actually e
 
 ### Project status
 
-Stable · v1.2.0. Generate the required API spec before starting either transport.
+Stable · v2.0.0. Generate the required API spec before starting either transport.
 
 ## Privacy
 
