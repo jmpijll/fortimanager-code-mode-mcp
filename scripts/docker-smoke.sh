@@ -94,4 +94,21 @@ if ! printf '%s' "$response" | grep -q '"serverInfo"'; then
 fi
 echo "POST /mcp initialize OK (serverInfo present)"
 
+# Modern-era check: a 2026-07-28 `server/discover` request must be answered
+# with the advertised supported versions while the server keeps serving the
+# 2025-era handshake above.
+discover="$(curl -fsS -X POST "http://127.0.0.1:${HOST_PORT}/mcp" \
+  -H 'Content-Type: application/json' \
+  -H 'Accept: application/json, text/event-stream' \
+  -H 'Mcp-Method: server/discover' \
+  -H 'Mcp-Protocol-Version: 2026-07-28' \
+  -d '{"jsonrpc":"2.0","id":"docker-smoke-discover","method":"server/discover","params":{"_meta":{"io.modelcontextprotocol/protocolVersion":"2026-07-28","io.modelcontextprotocol/clientInfo":{"name":"docker-smoke","version":"0.0.0"},"io.modelcontextprotocol/clientCapabilities":{}}}}')" \
+  || fail "POST /mcp server/discover request failed"
+
+if ! printf '%s' "$discover" | grep -q '"supportedVersions":\["2026-07-28"\]'; then
+  echo "Response body: $discover" >&2
+  fail "server/discover response did not advertise the 2026-07-28 revision"
+fi
+echo "POST /mcp server/discover OK (2026-07-28 revision advertised)"
+
 echo "PASS: ${IMAGE}"
