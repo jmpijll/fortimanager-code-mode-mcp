@@ -9,7 +9,7 @@
  */
 
 import { SERVER_VERSION } from '../version.js';
-import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
+import { McpServer, type McpServerOptions } from '@modelcontextprotocol/server';
 import { z } from 'zod';
 import type { SearchExecutor } from '../executor/search-executor.js';
 import type { CodeExecutor } from '../executor/code-executor.js';
@@ -141,7 +141,7 @@ if (status.code !== 0) {
 
 // ─── Server Factory ─────────────────────────────────────────────────
 
-export interface CreateServerOptions {
+export interface ToolDeps {
   searchExecutor: SearchExecutor;
   codeExecutor: CodeExecutor;
   specVersion: string;
@@ -149,20 +149,33 @@ export interface CreateServerOptions {
   logger?: {
     info: (msg: string, ...args: unknown[]) => void;
   };
+}
+
+/** Who is calling, already parsed from the boundary. Empty on stdio. */
+export interface CallerScope {
   /**
-   * Optional FortiManager token to use for live API calls made by this
-   * server's `execute` tool. When set, overrides the executor's default
-   * (env) token for the lifetime of this server instance. Used by the
-   * HTTP transport for per-request token passthrough.
+   * Per-request FortiManager token from the `X-FMG-Token` header (HTTP only,
+   * and only when `MCP_TOKEN_PASSTHROUGH=true`). Undefined falls back to the
+   * executor's default (env) token.
    */
   fmgToken?: string;
 }
 
 /**
+ * Cache hints for the cacheable results of the 2026-07-28 protocol revision.
+ * Both results are identical for every caller and change only on restart or
+ * upgrade.
+ */
+export const CACHE_HINTS = {
+  'tools/list': { ttlMs: 300_000, cacheScope: 'public' },
+  'server/discover': { ttlMs: 300_000, cacheScope: 'public' },
+} as const satisfies McpServerOptions['cacheHints'];
+
+/**
  * Create and configure the MCP server with search and execute tools.
  */
-export function createMcpServer(options: CreateServerOptions): McpServer {
-  const { searchExecutor, codeExecutor, specVersion, logger, fmgToken } = options;
+export function buildServer(deps: ToolDeps, caller: CallerScope): McpServer {
+  const { searchExecutor, codeExecutor, specVersion, logger } = deps;
 
   const server = new McpServer(
     {
@@ -180,6 +193,7 @@ export function createMcpServer(options: CreateServerOptions): McpServer {
         '',
         'Workflow: Search first to find the right URLs and attributes, then execute API calls.',
       ].join('\n'),
+      cacheHints: CACHE_HINTS,
     },
   );
 
@@ -196,27 +210,12 @@ export function createMcpServer(options: CreateServerOptions): McpServer {
         idempotentHint: true,
         openWorldHint: false,
       },
-      inputSchema: {
-        code: z
-          .string()
-          .describe(
-            'JavaScript code to execute against the API spec. The final expression is returned as the result.',
-          ),
-      },
+      inputSchema: codeInput(
+        'JavaScript code to execute against the API spec. The final expression is returned as the result.',
+      ),
     },
     async ({ code }) => {
       logger?.info(`[search] ${String(code.length)} chars`);
-      if (code.length > MAX_CODE_SIZE) {
-        return {
-          content: [
-            {
-              type: 'text' as const,
-              text: `Error: Code input too large (${String(code.length)} chars, max ${String(MAX_CODE_SIZE)}). Break into smaller queries.`,
-            },
-          ],
-          isError: true,
-        };
-      }
       try {
         const result = await searchExecutor.execute(code);
         logger?.info(`[search] ${result.ok ? 'ok' : 'error'} ${String(result.durationMs)}ms`);
@@ -249,29 +248,17 @@ export function createMcpServer(options: CreateServerOptions): McpServer {
         idempotentHint: false,
         openWorldHint: true,
       },
-      inputSchema: {
-        code: z
-          .string()
-          .describe(
-            'JavaScript code to execute against the live FortiManager API. Calls are synchronous — no await needed.',
-          ),
-      },
+      inputSchema: codeInput(
+        'JavaScript code to execute against the live FortiManager API. Calls are synchronous — no await needed.',
+      ),
     },
     async ({ code }) => {
       logger?.info(`[execute] ${String(code.length)} chars`);
-      if (code.length > MAX_CODE_SIZE) {
-        return {
-          content: [
-            {
-              type: 'text' as const,
-              text: `Error: Code input too large (${String(code.length)} chars, max ${String(MAX_CODE_SIZE)}). Break into smaller queries.`,
-            },
-          ],
-          isError: true,
-        };
-      }
       try {
-        const result = await codeExecutor.execute(code, fmgToken ? { fmgToken } : undefined);
+        const result = await codeExecutor.execute(
+          code,
+          caller.fmgToken ? { fmgToken: caller.fmgToken } : undefined,
+        );
         logger?.info(`[execute] ${result.ok ? 'ok' : 'error'} ${String(result.durationMs)}ms`);
         return formatToolResult(result);
       } catch (err: unknown) {
@@ -299,6 +286,24 @@ const MAX_RESULT_SIZE = 100_000; // ~100 KB
 
 /** Maximum allowed code input size in characters */
 const MAX_CODE_SIZE = 100_000; // ~100 KB
+
+// ─── Input Schemas ──────────────────────────────────────────────────
+
+/**
+ * The `code` argument both tools take. Defined once so the size limit and its
+ * message cannot drift between `search` and `execute`.
+ */
+function codeInput(description: string) {
+  return z.object({
+    code: z
+      .string()
+      .max(
+        MAX_CODE_SIZE,
+        `Code input too large (max ${String(MAX_CODE_SIZE)} chars). Break into smaller queries.`,
+      )
+      .describe(description),
+  });
+}
 
 // ─── Result Formatting ──────────────────────────────────────────────
 

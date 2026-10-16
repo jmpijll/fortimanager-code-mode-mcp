@@ -45,19 +45,23 @@ This approach reduces tool context from ~118K tokens (590+ tools) to ~1K tokens 
 
 ## Component Details
 
-### 1. Transport Layer (`src/server/transport.ts`)
+### 1. HTTP Edge and Transports (`src/server/http.ts`, `src/index.ts`)
 
 Supports two transport modes:
 
-- **Stdio**: Reads JSON-RPC from stdin, writes to stdout. Used for local development and VS Code Copilot integration. Stdout is reserved for MCP protocol; all logs go to stderr.
+- **Stdio**: `serveStdio()` from the MCP SDK reads JSON-RPC from stdin and writes to stdout. Used for local development and VS Code Copilot integration. Stdout is reserved for MCP protocol; all logs go to stderr.
 
-- **Streamable HTTP**: Node.js HTTP server with two endpoints:
+- **Streamable HTTP**: `createHttpApp()` builds the web-standard edge and `listenHttp()` binds it to `node:http` with two endpoints:
   - `/mcp` — MCP protocol (POST/GET/DELETE for Streamable HTTP spec)
   - `/health` — Health check with uptime and request stats
 
+Both transports serve protocol revision **2026-07-28** and still answer 2025-era clients with the plain `initialize` handshake. Nothing selects an era: the server reads it from the client's first request. On the modern era, `tools/list` and `server/discover` results carry 5-minute public cache hints.
+
 HTTP transport includes:
+- Header-first gates: `/health`, the 429 and the 401 are decided from the method, path and headers alone (`HttpApp.admit`) before any request body is read, so an unauthenticated or rate-limited caller is answered without uploading its body; an admitted `/mcp` call then goes through `HttpApp.serve` to the SDK adapter, which reads the body itself under its 4 MiB cap. A request whose head cannot even be parsed (a malformed `Host`, for example) is answered 400 with `Connection: close`
 - Rate limiting (60 req/min per client IP, sliding window)
 - Request logging with client IP tracking
+- Optional static Bearer auth (`MCP_API_KEY`) and per-request `X-FMG-Token` passthrough
 - X-Forwarded-For support for reverse proxies
 - Graceful shutdown on SIGINT/SIGTERM
 
@@ -69,7 +73,7 @@ Registers two tools with the MCP SDK:
 
 **`execute` tool**: Accepts JavaScript code, runs it in the `CodeExecutor` sandbox with access to `fortimanager.request()` for live API calls. Returns the final expression's value plus captured console output.
 
-Both tools enforce a 100 KB code input limit and include audit logging (code size, result status, execution duration).
+Both tools enforce a 100 KB code input limit and include audit logging (code size, result status, execution duration). Server construction takes a `CallerScope`, which carries the per-request `X-FMG-Token` on HTTP and is empty on stdio.
 
 ### 3. Search Executor (`src/executor/search-executor.ts`)
 

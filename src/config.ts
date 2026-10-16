@@ -10,7 +10,7 @@ import { z } from 'zod';
 
 const configSchema = z.object({
   /** FortiManager host URL */
-  fmgHost: z.string().url('FMG_HOST must be a valid URL (e.g., https://fmg.example.com)'),
+  fmgHost: z.url('FMG_HOST must be a valid URL (e.g., https://fmg.example.com)'),
 
   /** FortiManager HTTPS port */
   fmgPort: z.coerce.number().int().min(1).max(65535).default(443),

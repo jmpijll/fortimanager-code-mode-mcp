@@ -16,13 +16,14 @@ import { readFile } from 'node:fs/promises';
 import { resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
+import { serveStdio } from '@modelcontextprotocol/server/stdio';
 import { loadConfig } from './config.js';
 import { FmgClient } from './client/fmg-client.js';
 import { SearchExecutor } from './executor/search-executor.js';
 import { CodeExecutor } from './executor/code-executor.js';
 import { getQuickJSModule } from './executor/executor.js';
-import { createMcpServer } from './server/server.js';
-import { startStdioTransport, startHttpTransport } from './server/transport.js';
+import { buildServer, type ToolDeps } from './server/server.js';
+import { createHttpApp, listenHttp } from './server/http.js';
 import type { FmgApiSpec } from './types/spec-types.js';
 
 // ─── Helpers ────────────────────────────────────────────────────────
@@ -110,6 +111,26 @@ async function loadSpec(version: string): Promise<FmgApiSpec> {
   return spec;
 }
 
+// ─── Shutdown ───────────────────────────────────────────────────────
+
+/**
+ * Register one SIGINT/SIGTERM handler for whichever transport was started.
+ * `close` must be idempotent-safe: the first signal wins.
+ */
+function onShutdown(close: () => Promise<void>): void {
+  let shuttingDown = false;
+  const shutdown = (): void => {
+    if (shuttingDown) return;
+    shuttingDown = true;
+    logger.info('Shutting down...');
+    void close().catch((err: unknown) => {
+      logger.error('Error during shutdown:', err);
+    });
+  };
+  process.once('SIGINT', shutdown);
+  process.once('SIGTERM', shutdown);
+}
+
 // ─── Main ───────────────────────────────────────────────────────────
 
 async function main(): Promise<void> {
@@ -164,24 +185,29 @@ async function main(): Promise<void> {
 
   // 7. Start transport
   //
-  // The stdio transport is single-client by nature, so we build one McpServer
-  // and reuse it. The HTTP transport must support multiple sequential clients
-  // (each performs its own `initialize` handshake), so we pass a factory and
-  // build a fresh McpServer per request — see `startHttpTransport` for details.
+  // One factory, two serving entries: the SDK builds a fresh McpServer per
+  // HTTP request (and per stdio connection) from the same `buildServer`, so
+  // every client gets its own handshake and per-request CallerScope.
+  const deps: ToolDeps = {
+    searchExecutor,
+    codeExecutor,
+    specVersion: config.fmgApiVersion,
+    logger,
+  };
+
   if (config.mcpTransport === 'stdio') {
     if (config.mcpApiKey || config.mcpTokenPassthrough) {
       logger.warn(
         'MCP_API_KEY / MCP_TOKEN_PASSTHROUGH only apply to the HTTP transport — ignoring for stdio.',
       );
     }
-    const server = createMcpServer({
-      searchExecutor,
-      codeExecutor,
-      specVersion: config.fmgApiVersion,
-      logger,
+    const stdio = serveStdio(() => buildServer(deps, {}), {
+      onerror: (error: Error) => {
+        logger.error('MCP handler error:', error);
+      },
     });
-    logger.info('MCP server created with search + execute tools');
-    await startStdioTransport(server, logger);
+    logger.info('MCP server listening on stdio');
+    onShutdown(() => stdio.close());
   } else {
     if (config.mcpApiKey) {
       logger.info('MCP_API_KEY set — /mcp requires Authorization: Bearer <key>.');
@@ -192,22 +218,17 @@ async function main(): Promise<void> {
       );
     }
     logger.info('MCP server factory ready (search + execute tools, per-request instance)');
-    await startHttpTransport(
-      {
-        apiKey: config.mcpApiKey,
-        tokenPassthrough: config.mcpTokenPassthrough,
-        serverFactory: (ctx) =>
-          createMcpServer({
-            searchExecutor,
-            codeExecutor,
-            specVersion: config.fmgApiVersion,
-            logger,
-            fmgToken: ctx.fmgToken,
-          }),
-      },
-      config,
+    const app = createHttpApp({
+      deps,
+      apiKey: config.mcpApiKey,
+      tokenPassthrough: config.mcpTokenPassthrough,
       logger,
-    );
+    });
+    const listener = await listenHttp(app, { port: config.mcpHttpPort, logger });
+    logger.info(`MCP HTTP server listening on port ${String(listener.port)}`);
+    logger.info(`  Health:  http://localhost:${String(listener.port)}/health`);
+    logger.info(`  MCP:     http://localhost:${String(listener.port)}/mcp`);
+    onShutdown(() => listener.close());
   }
 }
 
