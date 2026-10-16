@@ -33,9 +33,9 @@ major version is zero (`v0.9.0`). Prereleases:
 ### GHCR tags
 
 For the stable tag `v1.2.0` the image gets `1.2.0`, `1.2`, `1` and `latest`.
-For the prerelease `v1.2.0-rc.1` the only tag is `1.2.0-rc.1`. For `0.x`
-versions the bare major tag is suppressed: `v0.3.0` produces `0.3.0`, `0.3`
-and `latest`.
+For the prerelease `v1.2.0-rc.1` the only tag is `1.2.0-rc.1`. `0.x` versions
+count as prereleases, so the bare major tag and `latest` are suppressed:
+`v0.3.0` produces `0.3.0` and `0.3` only.
 
 ## One-time npm setup
 
@@ -52,8 +52,10 @@ provenance-bearing):
 
 1. On npmjs.com open your avatar menu, then **Access tokens**, then **Generate
    new token**, then **Granular access token**.
-2. Give it read and write access to all packages. A granular token cannot be
-   scoped to a package that does not exist yet, and this publish creates it.
+2. Under **Permissions**, select **Read and write (publish and stage)** for all
+   packages. A token that can only stage cannot run this workflow's `npm
+   publish`. A granular token cannot be scoped to a package that does not
+   exist yet, and this publish creates it.
 3. Tick **Bypass two-factor authentication (2FA)** and set a short expiry, for
    example 30 days.
 4. Store the token as a repository secret: GitHub repo **Settings**, then
@@ -119,9 +121,10 @@ for user-owned packages.
 2. Confirm the package is linked to the repository. The
    `org.opencontainers.image.source` label set by the workflow handles the
    link automatically, and the settings page then shows the linked repository.
-3. Confirm the repository has Actions access on the same page. The set
-   `GITHUB_TOKEN` push from this repository's workflow is granted write access
-   automatically; the repository should appear under **Manage Actions access**.
+3. Confirm the repository has Actions access on the same page. Publishing from
+   this repository's workflow with `GITHUB_TOKEN` grants the repository
+   package access automatically, so it should already appear under
+   **Manage Actions access**.
 
 ## Cutting a release
 
@@ -160,8 +163,12 @@ The release pipeline can be exercised locally before tagging:
   `dist/spec`, no source maps), README, LICENSE and CHANGELOG.
 - `scripts/pack-smoke.sh`: packs the checkout, installs the tarball into a
   temporary project, and verifies the MCP `initialize` and `tools/list`
-  handshake over stdio from both the `npx` entry point and the installed
-  `fortimanager-mcp` bin. It exits nonzero on any failure.
+  handshake over stdio from both the documented `npx fortimanager-code-mode-mcp`
+  entry point and the installed `fortimanager-mcp` bin. It then runs
+  `npx --yes --package=<tarball> fortimanager-mcp` from an empty directory with
+  a throwaway npm cache and expects the `API SPEC NOT FOUND` failure, proving
+  the published bin resolves from the tarball alone. It exits nonzero on any
+  failure.
 - `docker buildx build --load -t fmg-mcp:smoke .` followed by
   `scripts/docker-smoke.sh fmg-mcp:smoke`: builds the image and checks
   `/health` plus an MCP `initialize` request with a minimal spec fixture
