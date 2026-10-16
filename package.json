@@ -9,13 +9,11 @@
   },
   "files": [
     "dist/",
+    "!dist/spec",
+    "!dist/**/*.map",
     "README.md",
     "LICENSE",
-    "CHANGELOG.md",
-    "docs/",
-    "CONTRIBUTING.md",
-    "SECURITY.md",
-    "AGENTS.md"
+    "CHANGELOG.md"
   ],
   "scripts": {
     "build": "tsc && node -e \"const fs=require('fs');const p=require('path');const s=p.join('src','spec');const d=p.join('dist','spec');fs.mkdirSync(d,{recursive:true});if(fs.existsSync(s)){fs.readdirSync(s).filter(f=>f.endsWith('.json')).forEach(f=>fs.copyFileSync(p.join(s,f),p.join(d,f)))}else{console.warn('WARN: src/spec/ not found — run npm run generate:spec to generate API specs')}\"",
@@ -49,6 +47,10 @@
   "homepage": "https://github.com/jmpijll/fortimanager-code-mode-mcp#readme",
   "bugs": {
     "url": "https://github.com/jmpijll/fortimanager-code-mode-mcp/issues"
+  },
+  "publishConfig": {
+    "access": "public",
+    "provenance": true
   },
   "engines": {
     "node": ">=22.19.0"

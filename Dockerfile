@@ -11,10 +11,8 @@ RUN npm ci
 COPY tsconfig.json ./
 COPY src/ ./src/
 
-# Copy pre-generated spec files into source tree
-# IMPORTANT: You must run `npm run generate:spec` locally before building this image.
-# The spec files are NOT included in the repository — see README.md for setup instructions.
-COPY src/spec/*.json ./src/spec/
+# API spec files are not redistributable and are no longer copied in explicitly.
+# Mount them at runtime instead: -v /path/to/spec:/app/dist/spec:ro (see README).
 
 RUN npm run build
 
@@ -37,8 +35,8 @@ RUN npm ci --omit=dev && npm cache clean --force
 # Copy compiled output from builder
 COPY --from=builder /app/dist/ ./dist/
 
-# Copy spec files to dist/spec/ (mirrors src/spec/ → dist/spec/)
-COPY --from=builder /app/src/spec/*.json ./dist/spec/
+# API specs are not shipped in the image (not redistributable).
+# Mount a spec directory at runtime: -v /path/to/spec:/app/dist/spec:ro (see README).
 
 # Switch to non-root user
 USER mcp

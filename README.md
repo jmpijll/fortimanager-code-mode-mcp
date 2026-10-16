@@ -33,7 +33,8 @@ The `execute` tool is marked potentially destructive in its MCP annotations, so 
 
 ## Get started
 
-Install from source and point your MCP client at the built `dist/index.js`.
+Install from npm, run the Docker image, or build from source. Every option
+needs a locally generated API spec; published packages and images do not include specs.
 
 ### Requirements
 
@@ -43,6 +44,39 @@ Install from source and point your MCP client at the built `dist/index.js`.
 Before building, download the Fortinet HTML reference and run `npm run generate:spec`.
 See [API spec setup](docs/usage-guide.md#important-api-spec-required). The proprietary
 HTML and generated specs are not redistributed.
+
+### Install from npm
+
+Releases are published to npm as `fortimanager-code-mode-mcp`, without API specs.
+The `fortimanager-mcp` binary loads the spec from `dist/spec/fmg-api-spec-<version>.json`
+inside the installed package, and there is no option to point it at another directory yet
+(a configurable spec path is a follow-up), so copy a generated spec into the installed
+package before starting:
+
+```bash
+npm install -g fortimanager-code-mode-mcp
+mkdir -p "$(npm root -g)/fortimanager-code-mode-mcp/dist/spec"
+cp src/spec/fmg-api-spec-7.6.json "$(npm root -g)/fortimanager-code-mode-mcp/dist/spec/"
+FMG_HOST=https://fmg.example.com FMG_API_TOKEN=<token> fortimanager-mcp
+```
+
+`npx fortimanager-code-mode-mcp` runs the same binary from a temporary cache. It works
+once the spec is copied into that cached copy, but the cache is recreated on upgrades;
+a global install, a source build, or Docker are steadier options.
+
+### Run with Docker
+
+The image runs the HTTP transport on port 8000 (`GET /health`, `POST /mcp`) and ships
+without specs. Mount a directory containing `fmg-api-spec-7.6.json` (or
+`fmg-api-spec-7.4.json`) at `/app/dist/spec`:
+
+```bash
+docker run -d --name fortimanager-mcp -p 8000:8000 \
+  -e FMG_HOST=https://fmg.example.com \
+  -e FMG_API_TOKEN=<token> \
+  -v /path/to/spec-dir:/app/dist/spec:ro \
+  ghcr.io/jmpijll/fortimanager-code-mode-mcp:latest
+```
 
 ### Build from source
 
@@ -71,6 +105,7 @@ Docker instructions are in [docker-compose.yml](docker-compose.yml).
 ## Important: API Spec Required
 
 [Generate the Fortinet API specs locally](docs/usage-guide.md#important-api-spec-required) before starting the server.
+The npm package and Docker image ship without them.
 
 ## Example session
 

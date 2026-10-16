@@ -10,10 +10,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 
 - Declare MCP tool annotations for `search` (read-only, idempotent, closed-world) and `execute` (destructive, open-world), letting clients gate confirmation prompts on `readOnlyHint` / `destructiveHint`.
+- Tagged releases (`v*`) now publish the package to npm with provenance and push a multi-arch (`linux/amd64`, `linux/arm64`) image to `ghcr.io/jmpijll/fortimanager-code-mode-mcp`.
+- CI builds the Docker image on every pull request and smoke-tests it (health endpoint plus an MCP `initialize` request) with a minimal spec fixture mounted at runtime.
+- CONTRIBUTING documents the one-time npm trusted publishing setup for releases.
 
 ### Changed
 
 - Enforce consistent formatting and contributor/Dependabot conventions; include linked documentation and artwork in package contents.
+
+- Docker images no longer bake in locally generated API specs; mount a spec directory at `/app/dist/spec`. The image now builds on a clean checkout without specs.
+- npm package contents are limited to `dist/`, README, LICENSE and CHANGELOG; `dist/spec` is excluded so generated specs can never ship, and source maps are dropped because `src/` is not in the tarball.
+- README documents `npx`/npm and GHCR install paths, including where each expects the spec file.
 
 - Derive Node MCP version metadata from package.json across the family; use package metadata in Worker scaffolds to prevent release drift.
 - Align README presentation with Vapour and Slightshot, retaining detailed setup and historical verification in the usage guide.
