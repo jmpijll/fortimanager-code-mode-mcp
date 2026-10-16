@@ -330,9 +330,9 @@ function json(status: number, body: unknown, headers?: Record<string, string>): 
 }
 
 /**
- * Write an early response straight to the socket. The request body is never
- * read, and `Connection: close` stops a half-sent body from pinning the
- * connection after the answer is out.
+ * Write a small JSON response straight to the socket, adding
+ * `Connection: close` so a half-sent request body cannot pin the connection
+ * after the answer is out.
  */
 async function writeGateResponse(res: ServerResponse, response: Response): Promise<void> {
   const headers: Record<string, string> = {};
@@ -342,17 +342,6 @@ async function writeGateResponse(res: ServerResponse, response: Response): Promi
 
   res.writeHead(response.status, { ...headers, Connection: 'close' });
   res.end(await response.text());
-}
-
-/**
- * Report a throw from the adapter to the logger, unless the adapter already
- * answered the request — then there is nothing left to say and no response to
- * write. Returns true when the error has been handled.
- */
-function reportAdapterError(res: ServerResponse, logger: Logger, err: unknown): boolean {
-  if (res.headersSent) return true;
-  logger.error('HTTP handler error:', err);
-  return false;
 }
 
 /**
@@ -390,14 +379,20 @@ export function listenHttp(
 
     // The adapter answers 500 itself for a throw from `app.serve` or from the
     // request conversion, so `onerror` is the only place those errors surface.
-    // The wrapper below covers the rarer throw between that answer and
-    // `res.end`.
+    // A throw from the adapter's own write path (`writeHead`, `res.end`)
+    // reaches the wrapper below instead, and is always logged: it is answered
+    // with 500 while nothing has gone out, and once the head has, the socket
+    // is dropped so the client is not left waiting for a body that never comes.
     const handler = toNodeHandler(
       { fetch: (request) => app.serve(request, peer) },
       { onerror: (error) => at.logger.error('HTTP handler error:', error) },
     );
     void handler(req, res).catch((err: unknown) => {
-      if (reportAdapterError(res, at.logger, err)) return;
+      at.logger.error('HTTP handler error:', err);
+      if (res.headersSent) {
+        res.destroy();
+        return;
+      }
       void writeGateResponse(res, json(500, { error: 'Internal server error' })).catch(
         (e: unknown) => {
           at.logger.error('HTTP handler error:', e);
