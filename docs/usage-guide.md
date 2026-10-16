@@ -731,7 +731,7 @@ Add to your Claude Desktop configuration (`claude_desktop_config.json`):
 # Install dependencies
 npm ci
 
-# Run unit tests (112 tests across 6 files)
+# Run unit tests
 npm test
 
 # Run integration tests against a live FortiManager (requires .env)
@@ -774,7 +774,7 @@ src/
 │   └── fmg-api-spec-7.6.json  # 82 modules, 22,060 objects, 49,285 URLs
 ├── types/            # Shared type definitions
 ├── config.ts         # Zod-validated environment config
-├── __tests__/        # Unit tests (92 tests across 6 files)
+├── __tests__/        # Unit tests
 │   └── fixtures/     # Sample spec, response builders
 └── index.ts          # Entry point
 scripts/
