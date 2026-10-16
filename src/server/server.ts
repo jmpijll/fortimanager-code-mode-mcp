@@ -210,17 +210,9 @@ export function buildServer(deps: ToolDeps, caller: CallerScope): McpServer {
         idempotentHint: true,
         openWorldHint: false,
       },
-      inputSchema: z.object({
-        code: z
-          .string()
-          .max(
-            MAX_CODE_SIZE,
-            `Code input too large (max ${String(MAX_CODE_SIZE)} chars). Break into smaller queries.`,
-          )
-          .describe(
-            'JavaScript code to execute against the API spec. The final expression is returned as the result.',
-          ),
-      }),
+      inputSchema: codeInput(
+        'JavaScript code to execute against the API spec. The final expression is returned as the result.',
+      ),
     },
     async ({ code }) => {
       logger?.info(`[search] ${String(code.length)} chars`);
@@ -256,17 +248,9 @@ export function buildServer(deps: ToolDeps, caller: CallerScope): McpServer {
         idempotentHint: false,
         openWorldHint: true,
       },
-      inputSchema: z.object({
-        code: z
-          .string()
-          .max(
-            MAX_CODE_SIZE,
-            `Code input too large (max ${String(MAX_CODE_SIZE)} chars). Break into smaller queries.`,
-          )
-          .describe(
-            'JavaScript code to execute against the live FortiManager API. Calls are synchronous — no await needed.',
-          ),
-      }),
+      inputSchema: codeInput(
+        'JavaScript code to execute against the live FortiManager API. Calls are synchronous — no await needed.',
+      ),
     },
     async ({ code }) => {
       logger?.info(`[execute] ${String(code.length)} chars`);
@@ -302,6 +286,24 @@ const MAX_RESULT_SIZE = 100_000; // ~100 KB
 
 /** Maximum allowed code input size in characters */
 const MAX_CODE_SIZE = 100_000; // ~100 KB
+
+// ─── Input Schemas ──────────────────────────────────────────────────
+
+/**
+ * The `code` argument both tools take. Defined once so the size limit and its
+ * message cannot drift between `search` and `execute`.
+ */
+function codeInput(description: string) {
+  return z.object({
+    code: z
+      .string()
+      .max(
+        MAX_CODE_SIZE,
+        `Code input too large (max ${String(MAX_CODE_SIZE)} chars). Break into smaller queries.`,
+      )
+      .describe(description),
+  });
+}
 
 // ─── Result Formatting ──────────────────────────────────────────────
 
