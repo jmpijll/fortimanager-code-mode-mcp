@@ -10,10 +10,44 @@ jobs:
     name: CI Checks
     uses: ./.github/workflows/ci.yml
 
+  version:
+    # Single gate and release channel for every publishing job: fails on a tag
+    # that does not match package.json and classifies the release once.
+    name: Verify Version
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    outputs:
+      version: ${{ steps.channel.outputs.version }}
+      prerelease: ${{ steps.channel.outputs.prerelease }}
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Verify tag and derive release channel
+        id: channel
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          PKG_VERSION="$(node -p "require('./package.json').version")"
+          if [ "$VERSION" != "$PKG_VERSION" ]; then
+            echo "::error::Tag v${VERSION} does not match package.json version ${PKG_VERSION}"
+            exit 1
+          fi
+          # Prerelease: version suffix (`v1.2.0-rc.1`) or major zero. This is
+          # the single source of truth every publishing job consumes.
+          PRERELEASE=false
+          MAJOR="${VERSION%%.*}"
+          if [[ "$VERSION" == *-* || "$MAJOR" == "0" ]]; then
+            PRERELEASE=true
+          fi
+          echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
+          echo "prerelease=${PRERELEASE}" >> "$GITHUB_OUTPUT"
+          echo "Tag v${VERSION} matches package.json (prerelease=${PRERELEASE})"
+
   release:
     name: Create GitHub Release
     runs-on: ubuntu-latest
-    needs: [ci]
+    needs: [ci, version]
     permissions:
       contents: write
 
@@ -58,16 +92,21 @@ jobs:
           fi
           
           # Write to output using delimiter
-          echo "notes<<RELEASE_EOF" >> "$GITHUB_OUTPUT"
-          echo "$NOTES" >> "$GITHUB_OUTPUT"
-          echo "RELEASE_EOF" >> "$GITHUB_OUTPUT"
+          {
+            echo "notes<<RELEASE_EOF"
+            echo "$NOTES"
+            echo "RELEASE_EOF"
+          } >> "$GITHUB_OUTPUT"
 
       - name: Determine pre-release status
         id: prerelease
+        env:
+          # Single source of truth: the shared `version` job classifies the
+          # release, so a labelled prerelease (e.g. v1.2.0-rc.1) is never
+          # marked stable here.
+          PRERELEASE: ${{ needs.version.outputs.prerelease }}
         run: |
-          VERSION="${{ steps.version.outputs.version }}"
-          MAJOR=$(echo "$VERSION" | cut -d. -f1)
-          if [ "$MAJOR" = "0" ]; then
+          if [ "$PRERELEASE" = "true" ]; then
             echo "is_prerelease=true" >> "$GITHUB_OUTPUT"
             echo "suffix= (Pre-release)" >> "$GITHUB_OUTPUT"
           else
@@ -89,3 +128,120 @@ jobs:
             > **Note**: This server requires locally-generated API spec files. See [README](https://github.com/${{ github.repository }}#important-api-spec-required) for setup instructions.
           prerelease: ${{ steps.prerelease.outputs.is_prerelease }}
           generate_release_notes: false
+
+  npm-publish:
+    # Runs alongside `release` (both need `ci` + `version`): the GitHub Release,
+    # the npm package and the GHCR image are independent artifacts of the same
+    # tag, so a failure in one does not block the others. The shared `version`
+    # job keeps the tag, package version and release channel consistent.
+    name: Publish to npm
+    runs-on: ubuntu-latest
+    needs: [ci, version]
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      # Required for npm trusted publishing (OIDC), no NPM_TOKEN secret needed.
+      id-token: write
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 22
+          registry-url: https://registry.npmjs.org
+
+      - run: npm ci
+
+      - run: npm run build
+
+      - name: Check whether this version is already on npm
+        id: published
+        env:
+          VERSION: ${{ needs.version.outputs.version }}
+        run: |
+          # Only a definite E404 means "not published": network errors,
+          # timeouts and auth failures must fail the step instead of
+          # triggering a blind re-publish attempt.
+          if OUTPUT=$(npm view "fortimanager-code-mode-mcp@${VERSION}" version 2>&1); then
+            echo "exists=true" >> "$GITHUB_OUTPUT"
+            echo "::notice::fortimanager-code-mode-mcp@${VERSION} already exists on npm; skipping publish."
+          elif echo "$OUTPUT" | grep -q "E404"; then
+            echo "exists=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "$OUTPUT"
+            echo "::error::npm view failed for a reason other than E404; refusing to treat the version as unpublished."
+            exit 1
+          fi
+
+      - name: Publish to npm
+        if: steps.published.outputs.exists != 'true'
+        env:
+          PRERELEASE: ${{ needs.version.outputs.prerelease }}
+        # Trusted publishing needs npm CLI >= 11.5.1, which Node 22's bundled npm
+        # is not. Use an ephemeral npm 11 for this step only, so the repo
+        # toolchain stays on the Node 22 defaults.
+        run: |
+          TAG_ARGS=()
+          if [ "$PRERELEASE" = "true" ]; then
+            # npm 11 rejects a prerelease publish without an explicit tag.
+            TAG_ARGS=(--tag next)
+          fi
+          npx -y npm@^11.5.1 publish --provenance --access public "${TAG_ARGS[@]}"
+
+  ghcr:
+    name: Publish GHCR Image
+    runs-on: ubuntu-latest
+    needs: [ci, version]
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: docker/setup-qemu-action@v4
+
+      - uses: docker/setup-buildx-action@v4
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Docker metadata
+        id: meta
+        uses: docker/metadata-action@v6
+        with:
+          images: ghcr.io/jmpijll/fortimanager-code-mode-mcp
+          # `latest` only for stable releases; metadata-action already limits
+          # prerelease semver tags to {{version}}, and the bare `major` tag is
+          # suppressed for 0.x per docker/metadata-action#major-version-zero.
+          flavor: |
+            latest=false
+          tags: |
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=semver,pattern={{major}},enable=${{ !startsWith(github.ref, 'refs/tags/v0.') }}
+            type=raw,value=latest,enable=${{ needs.version.outputs.prerelease != 'true' }}
+          labels: |
+            org.opencontainers.image.title=FortiManager Code Mode MCP Server
+            org.opencontainers.image.description=FortiManager Code Mode MCP Server (search + execute tools, QuickJS WASM sandbox)
+            org.opencontainers.image.licenses=MIT
+            org.opencontainers.image.source=https://github.com/jmpijll/fortimanager-code-mode-mcp
+            org.opencontainers.image.version=${{ needs.version.outputs.version }}
+            org.opencontainers.image.revision=${{ github.sha }}
+
+      - name: Build and push multi-arch image
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          provenance: mode=max
+          sbom: true
