@@ -57,15 +57,7 @@ export interface FmgStatus {
 
 /** Supported JSON-RPC methods */
 export type FmgMethod =
-  | 'get'
-  | 'set'
-  | 'add'
-  | 'update'
-  | 'delete'
-  | 'exec'
-  | 'clone'
-  | 'move'
-  | 'replace';
+  'get' | 'set' | 'add' | 'update' | 'delete' | 'exec' | 'clone' | 'move' | 'replace';
 
 // ─── FMG Options ────────────────────────────────────────────────────
 

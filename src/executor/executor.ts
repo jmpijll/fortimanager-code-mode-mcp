@@ -203,6 +203,7 @@ function stringifyValue(value: unknown): string {
   try {
     return JSON.stringify(value);
   } catch {
-    return typeof value === 'object' ? '[object]' : String(value as string);
+    // JSON.stringify only throws for BigInt values and circular structures
+    return typeof value === 'bigint' ? value.toString() : '[object]';
   }
 }

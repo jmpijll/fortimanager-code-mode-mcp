@@ -85,7 +85,7 @@ npm start
 
 ### Formatting
 
-This project uses **Prettier** for formatting and **ESLint** for linting:
+This project uses **Prettier** for formatting and **ESLint** for linting. ESLint reads the flat config in `eslint.config.js`, which applies `typescript-eslint` type-checked rules through `tsconfig.eslint.json`:
 
 ```bash
 # Format all files
@@ -103,7 +103,7 @@ npm run lint:fix
 
 ## Testing
 
-We use **Vitest** for testing. Tests live alongside source in `src/__tests__/`.
+We use **Vitest** for testing. Tests live alongside source in `src/__tests__/`. `npm run test:coverage` uses the V8 provider (`@vitest/coverage-v8`).
 
 ```bash
 # Run all tests

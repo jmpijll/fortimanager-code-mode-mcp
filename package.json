@@ -19,8 +19,8 @@
     "build": "tsc && node -e \"const fs=require('fs');const p=require('path');const s=p.join('src','spec');const d=p.join('dist','spec');fs.mkdirSync(d,{recursive:true});if(fs.existsSync(s)){fs.readdirSync(s).filter(f=>f.endsWith('.json')).forEach(f=>fs.copyFileSync(p.join(s,f),p.join(d,f)))}else{console.warn('WARN: src/spec/ not found — run npm run generate:spec to generate API specs')}\"",
     "dev": "tsx src/index.ts",
     "start": "node dist/index.js",
-    "lint": "eslint src/ scripts/ --ext .ts",
-    "lint:fix": "eslint src/ scripts/ --ext .ts --fix",
+    "lint": "eslint src scripts vitest.config.ts",
+    "lint:fix": "eslint src scripts vitest.config.ts --fix",
     "format": "prettier --write \"src/**/*.ts\" \"scripts/**/*.ts\"",
     "format:check": "prettier --check \"src/**/*.ts\" \"scripts/**/*.ts\"",
     "typecheck": "tsc --noEmit",
@@ -55,15 +55,17 @@
     "node": ">=22.19.0"
   },
   "devDependencies": {
-    "@types/node": "^22.0.0",
-    "@typescript-eslint/eslint-plugin": "^8.0.0",
-    "@typescript-eslint/parser": "^8.0.0",
-    "dotenv": "^17.3.1",
-    "eslint": "^8.57.0",
-    "prettier": "^3.4.0",
-    "tsx": "^4.19.0",
-    "typescript": "^5.6.0",
-    "vitest": "^2.1.0"
+    "@eslint/js": "^10.0.1",
+    "@types/node": "^22.20.5",
+    "@vitest/coverage-v8": "^5.0.5",
+    "dotenv": "^18.0.8",
+    "eslint": "^10.12.0",
+    "prettier": "^3.9.10",
+    "tsx": "^4.23.15",
+    "typescript": "~6.0.3",
+    "typescript-eslint": "^8.71.2",
+    "vite": "^8.3.4",
+    "vitest": "^5.0.5"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.0.0",

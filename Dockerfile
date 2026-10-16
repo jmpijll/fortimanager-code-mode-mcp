@@ -1,5 +1,5 @@
 # ─── Stage 1: Build ──────────────────────────────────────────────────
-FROM node:22-alpine AS builder
+FROM node:24-alpine AS builder
 
 WORKDIR /app
 
@@ -17,7 +17,7 @@ COPY src/ ./src/
 RUN npm run build
 
 # ─── Stage 2: Production ────────────────────────────────────────────
-FROM node:22-alpine AS production
+FROM node:24-alpine AS production
 
 LABEL org.opencontainers.image.source="https://github.com/jmpijll/fortimanager-code-mode-mcp"
 LABEL org.opencontainers.image.description="FortiManager Code Mode MCP Server — 2 tools (search + execute) with QuickJS WASM sandbox"
