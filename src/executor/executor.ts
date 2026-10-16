@@ -77,7 +77,8 @@ export abstract class BaseExecutor {
 
       if (result.error) {
         const errorValue: unknown = context.dump(result.error);
-        result.error.dispose();
+        // dump() consumes promise handles, so the error may already be disposed
+        if (result.error.alive) result.error.dispose();
 
         return {
           ok: false,
@@ -88,7 +89,8 @@ export abstract class BaseExecutor {
       }
 
       const value: unknown = context.dump(result.value);
-      result.value.dispose();
+      // dump() consumes promise handles, so the value may already be disposed
+      if (result.value.alive) result.value.dispose();
 
       return {
         ok: true,
