@@ -11,8 +11,8 @@ RUN npm ci
 COPY tsconfig.json ./
 COPY src/ ./src/
 
-# API spec files are not redistributable and are no longer copied in explicitly.
-# Mount them at runtime instead: -v /path/to/spec:/app/dist/spec:ro (see README).
+# API specs are never in the image (not redistributable); mount them at
+# /app/dist/spec at runtime: -v /path/to/spec:/app/dist/spec:ro (see README)
 
 RUN npm run build
 
@@ -35,8 +35,8 @@ RUN npm ci --omit=dev && npm cache clean --force
 # Copy compiled output from builder
 COPY --from=builder /app/dist/ ./dist/
 
-# API specs are not shipped in the image (not redistributable).
-# Mount a spec directory at runtime: -v /path/to/spec:/app/dist/spec:ro (see README).
+# API specs are never in the image (not redistributable); mount them at
+# /app/dist/spec at runtime: -v /path/to/spec:/app/dist/spec:ro (see README)
 
 # Switch to non-root user
 USER mcp

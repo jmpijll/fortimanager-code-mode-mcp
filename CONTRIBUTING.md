@@ -247,13 +247,33 @@ npm publishing uses [trusted publishing](https://docs.npmjs.com/trusted-publishe
 11.5.1 or newer; the publish job runs `npx npm@^11.5.1` because Node 22's bundled
 npm is older.
 
+Prereleases — a version with a suffix (`v1.2.0-rc.1`) or a `0.x` version — publish
+to the npm `next` tag and do not move GHCR's `latest`.
+
+If a release run fails partway, prefer GitHub's **Re-run failed jobs** over re-running
+every job from scratch: the npm job skips a version that is already published and GHCR
+pushes overwrite the same tags, so a full re-run also converges, but re-running the
+jobs that already succeeded only wastes CI time.
+
 ### One-time npm trusted publisher setup
 
 Trusted publishers are configured on the published package page, so the package
 must exist on npm first:
 
 1. If the package has never been published, publish it once by hand from a trusted
-   machine: `npm login && npm publish --access public`.
+   machine with two-factor authentication enabled:
+
+   ```bash
+   npm ci
+   npm run build
+   npm pack --dry-run   # inspect the file list: dist/ plus README, LICENSE, CHANGELOG
+   npm publish --access public
+   ```
+
+   Do not pass `--provenance` for this manual publish; npm only supports provenance
+   on supported CI runners, which the release workflow provides. The next automated
+   `v*` release must use a new version, because this manual publish has taken the
+   current one.
 2. On npmjs.com open **Packages** -> `fortimanager-code-mode-mcp` -> **Settings** ->
    **Trusted publishing** -> **Add trusted publisher** -> **GitHub Actions** and set:
    - Organization or user: `jmpijll`

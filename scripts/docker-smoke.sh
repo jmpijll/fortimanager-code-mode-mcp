@@ -1,25 +1,15 @@
 #!/usr/bin/env bash
 #
-# Smoke test for the FortiManager Code Mode MCP Docker image.
-#
-# Starts the image with a minimal API spec mounted at /app/dist/spec, waits for
-# GET /health to return 200, then sends an MCP `initialize` request to POST /mcp
-# and checks that the response contains serverInfo. The container is always
-# removed, also on failure (its logs are printed first).
-#
-# The image ships without API specs (they are not redistributable), so the
-# fixture below is written by this script and mounted read-only. It satisfies
-# the startup validation in src/index.ts (non-empty `version` string and
-# non-empty `modules` array) and nothing else.
-#
-# Usage:
-#   scripts/docker-smoke.sh [image-tag]
+# Usage: scripts/docker-smoke.sh [image-tag]
 #
 #   image-tag   Image to run (default: fmg-mcp:smoke)
 #
 # Environment overrides:
 #   SMOKE_PORT         Host port to publish container port 8000 on (default: 8000)
 #   SMOKE_API_VERSION  Spec version / FMG_API_VERSION to use (default: 7.6)
+#
+# The spec fixture is written here because the image ships without specs (they
+# are not redistributable) and is mounted read-only at /app/dist/spec.
 
 set -euo pipefail
 
@@ -59,6 +49,11 @@ cat > "$SPEC_FILE" <<'JSON'
   "errors": []
 }
 JSON
+
+# `mktemp -d` creates a 0700 dir; on Linux bind mounts keep those modes, and the
+# container runs as the non-root `mcp` user, which then cannot read the fixture.
+chmod 755 "$SPEC_DIR"
+chmod 644 "$SPEC_FILE"
 
 echo "Starting ${IMAGE} as ${CONTAINER} (spec ${SPEC_FILE}, host port ${HOST_PORT})..."
 docker run -d --name "$CONTAINER" \

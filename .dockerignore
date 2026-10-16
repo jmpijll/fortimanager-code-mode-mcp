@@ -47,4 +47,5 @@ out/
 .wrangler-out/
 coverage/
 *.log
-src/spec/cache/
+# API specs are not redistributable: never enter the build context
+src/spec/

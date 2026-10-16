@@ -78,6 +78,9 @@ docker run -d --name fortimanager-mcp -p 8000:8000 \
   ghcr.io/jmpijll/fortimanager-code-mode-mcp:latest
 ```
 
+`FMG_API_VERSION` defaults to `7.6`. If only `fmg-api-spec-7.4.json` is mounted, add
+`-e FMG_API_VERSION=7.4` or the server exits at startup without finding its spec.
+
 ### Build from source
 
 ```bash
