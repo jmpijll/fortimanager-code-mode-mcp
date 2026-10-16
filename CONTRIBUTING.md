@@ -240,7 +240,7 @@ match the `version` field in `package.json`; the release workflow fails otherwis
 `.github/workflows/release.yml` then runs CI, creates the GitHub Release from the
 matching `CHANGELOG.md` section, publishes the package to npm, and pushes the
 multi-arch image to `ghcr.io/jmpijll/fortimanager-code-mode-mcp` (tags `x.y.z`,
-`x.y`, `x`, `latest`).
+`x.y`, `x`, `latest`; 0.x releases omit the bare `x` tag).
 
 npm publishing uses [trusted publishing](https://docs.npmjs.com/trusted-publishers)
 (OIDC), so no `NPM_TOKEN` secret is configured. Trusted publishing needs npm CLI

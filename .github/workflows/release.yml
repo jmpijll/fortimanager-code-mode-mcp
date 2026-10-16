@@ -33,8 +33,8 @@ jobs:
             echo "::error::Tag v${VERSION} does not match package.json version ${PKG_VERSION}"
             exit 1
           fi
-          # Prerelease: version suffix (`v1.2.0-rc.1`) or major zero, matching
-          # the pre-release policy of the `release` job below.
+          # Prerelease: version suffix (`v1.2.0-rc.1`) or major zero. This is
+          # the single source of truth every publishing job consumes.
           PRERELEASE=false
           MAJOR="${VERSION%%.*}"
           if [[ "$VERSION" == *-* || "$MAJOR" == "0" ]]; then
@@ -100,10 +100,13 @@ jobs:
 
       - name: Determine pre-release status
         id: prerelease
+        env:
+          # Single source of truth: the shared `version` job classifies the
+          # release, so a labelled prerelease (e.g. v1.2.0-rc.1) is never
+          # marked stable here.
+          PRERELEASE: ${{ needs.version.outputs.prerelease }}
         run: |
-          VERSION="${{ steps.version.outputs.version }}"
-          MAJOR=$(echo "$VERSION" | cut -d. -f1)
-          if [ "$MAJOR" = "0" ]; then
+          if [ "$PRERELEASE" = "true" ]; then
             echo "is_prerelease=true" >> "$GITHUB_OUTPUT"
             echo "suffix= (Pre-release)" >> "$GITHUB_OUTPUT"
           else
@@ -153,22 +156,33 @@ jobs:
 
       - name: Check whether this version is already on npm
         id: published
+        env:
+          VERSION: ${{ needs.version.outputs.version }}
         run: |
-          if npm view "fortimanager-code-mode-mcp@${{ needs.version.outputs.version }}" version >/dev/null 2>&1; then
+          # Only a definite E404 means "not published": network errors,
+          # timeouts and auth failures must fail the step instead of
+          # triggering a blind re-publish attempt.
+          if OUTPUT=$(npm view "fortimanager-code-mode-mcp@${VERSION}" version 2>&1); then
             echo "exists=true" >> "$GITHUB_OUTPUT"
-            echo "::notice::fortimanager-code-mode-mcp@${{ needs.version.outputs.version }} already exists on npm; skipping publish."
-          else
+            echo "::notice::fortimanager-code-mode-mcp@${VERSION} already exists on npm; skipping publish."
+          elif echo "$OUTPUT" | grep -q "E404"; then
             echo "exists=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "$OUTPUT"
+            echo "::error::npm view failed for a reason other than E404; refusing to treat the version as unpublished."
+            exit 1
           fi
 
       - name: Publish to npm
         if: steps.published.outputs.exists != 'true'
+        env:
+          PRERELEASE: ${{ needs.version.outputs.prerelease }}
         # Trusted publishing needs npm CLI >= 11.5.1, which Node 22's bundled npm
         # is not. Use an ephemeral npm 11 for this step only, so the repo
         # toolchain stays on the Node 22 defaults.
         run: |
           TAG_ARGS=()
-          if [ "${{ needs.version.outputs.prerelease }}" = "true" ]; then
+          if [ "$PRERELEASE" = "true" ]; then
             # npm 11 rejects a prerelease publish without an explicit tag.
             TAG_ARGS=(--tag next)
           fi
@@ -202,13 +216,14 @@ jobs:
         with:
           images: ghcr.io/jmpijll/fortimanager-code-mode-mcp
           # `latest` only for stable releases; metadata-action already limits
-          # prerelease semver tags to {{version}}.
+          # prerelease semver tags to {{version}}, and the bare `major` tag is
+          # suppressed for 0.x per docker/metadata-action#major-version-zero.
           flavor: |
             latest=false
           tags: |
             type=semver,pattern={{version}}
             type=semver,pattern={{major}}.{{minor}}
-            type=semver,pattern={{major}}
+            type=semver,pattern={{major}},enable=${{ !startsWith(github.ref, 'refs/tags/v0.') }}
             type=raw,value=latest,enable=${{ needs.version.outputs.prerelease != 'true' }}
           labels: |
             org.opencontainers.image.title=FortiManager Code Mode MCP Server
