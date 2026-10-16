@@ -15,6 +15,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Align README presentation with Vapour and Slightshot, retaining detailed setup and historical verification in the usage guide.
 - Align Node 22.19+ requirements, contributor checks, install policy, LF text handling, CI and Docker build exclusions across the code-mode server family.
 
+### Security
+
+- Refresh `package-lock.json` within the existing semver ranges to clear all `npm audit --omit=dev` findings (11 → 0), including the `@modelcontextprotocol/sdk` OAuth advisory and `undici` advisories (`@modelcontextprotocol/sdk` 1.27.1 → 1.32.1, `undici` 7.22.0 → 7.30.1); `package.json` ranges are unchanged.
+
 
 ## [1.1.0] — 2026-05-27
 
