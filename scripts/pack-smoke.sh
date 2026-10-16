@@ -6,8 +6,12 @@
 # temp project, copies the shared minimal spec fixture into the installed
 # package's dist/spec/ (specs never ship in the tarball), and drives the stdio
 # transport through an MCP `initialize` + `tools/list` exchange with both the
-# `npx` entry point and the installed `fortimanager-mcp` bin. Exits nonzero on
-# any failure.
+# documented `npx fortimanager-code-mode-mcp` entry point and the installed
+# `fortimanager-mcp` bin. A final isolated check runs
+# `npx --yes --package=<tarball> fortimanager-mcp` from an empty directory with
+# a throwaway npm cache and expects the `API SPEC NOT FOUND` failure, proving
+# the published bin resolves from the tarball alone. Exits nonzero on any
+# failure.
 #
 # Environment overrides:
 #   SMOKE_API_VERSION  Spec version / FMG_API_VERSION to use (default: 7.6)
@@ -159,7 +163,59 @@ check_entry_point() {
     || fail "${label} did not complete the MCP handshake"
 }
 
-check_entry_point "npx fortimanager-mcp" npx fortimanager-mcp
+check_entry_point "npx fortimanager-code-mode-mcp" npx fortimanager-code-mode-mcp
 check_entry_point "installed fortimanager-mcp bin" ./node_modules/.bin/fortimanager-mcp
 
-echo "PASS: packed tarball serves search + execute over stdio (v${PACKAGE_VERSION})"
+# Isolated `npx --package` resolution: the package must contain everything the
+# bin needs, from an empty directory and a throwaway cache. Without a spec the
+# server is expected to fail with `API SPEC NOT FOUND`; that output is only
+# reachable when npx resolved the bin from the tarball alone.
+cat > "$WORK_DIR/npx-resolution-check.mjs" <<'NPX_CHECK'
+import { spawn } from 'node:child_process';
+
+const [timeoutMsRaw, tarball] = process.argv.slice(2);
+const timeoutMs = Number(timeoutMsRaw);
+
+const child = spawn('npx', ['--yes', `--package=${tarball}`, 'fortimanager-mcp'], {
+  env: {
+    ...process.env,
+    FMG_HOST: 'https://127.0.0.1',
+    FMG_API_TOKEN: 'dummy',
+  },
+  stdio: ['ignore', 'pipe', 'pipe'],
+});
+
+let output = '';
+child.stdout.on('data', (chunk) => (output += chunk.toString()));
+child.stderr.on('data', (chunk) => (output += chunk.toString()));
+
+const timer = setTimeout(() => {
+  child.kill('SIGKILL');
+  console.error(`FAIL: npx --package=<tarball> fortimanager-mcp did not finish within ${timeoutMs / 1000}s`);
+  console.error(output);
+  process.exit(1);
+}, timeoutMs);
+
+child.on('exit', (code, signal) => {
+  clearTimeout(timer);
+  if (code === 0) {
+    console.error('FAIL: npx --package=<tarball> fortimanager-mcp exited 0; expected the missing-spec failure');
+    console.error(output);
+    process.exit(1);
+  }
+  if (!output.includes('API SPEC NOT FOUND')) {
+    console.error(`FAIL: expected "API SPEC NOT FOUND" in the output (exit ${code ?? signal})`);
+    console.error(output);
+    process.exit(1);
+  }
+  console.log(`isolated npx --package resolution OK (exit ${code ?? signal}, "API SPEC NOT FOUND" as expected)`);
+});
+NPX_CHECK
+
+echo "Checking isolated npx --package resolution..."
+ISOLATED_DIR="$WORK_DIR/isolated"
+mkdir -p "$ISOLATED_DIR" "$WORK_DIR/npm-cache"
+(cd "$ISOLATED_DIR" && npm_config_cache="$WORK_DIR/npm-cache" node "$WORK_DIR/npx-resolution-check.mjs" 120000 "$TARBALL") \
+  || fail "isolated npx --package resolution check failed"
+
+echo "PASS: packed tarball serves search + execute over stdio (v${PACKAGE_VERSION}) and the bin resolves from the tarball alone"
