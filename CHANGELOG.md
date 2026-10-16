@@ -7,12 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.2.0] — 2026-10-16
+
 ### Added
 
 - Declare MCP tool annotations for `search` (read-only, idempotent, closed-world) and `execute` (destructive, open-world), letting clients gate confirmation prompts on `readOnlyHint` / `destructiveHint`.
 - Tagged releases (`v*`) now publish the package to npm with provenance and push a multi-arch (`linux/amd64`, `linux/arm64`) image to `ghcr.io/jmpijll/fortimanager-code-mode-mcp`.
 - CI builds the Docker image on every pull request and smoke-tests it (health endpoint plus an MCP `initialize` request) with a minimal spec fixture mounted at runtime.
-- CONTRIBUTING documents the one-time npm trusted publishing setup for releases.
+- [`docs/releasing.md`](docs/releasing.md) documents the release pipeline and the one-time npm trusted publishing setup for releases.
+- `scripts/pack-smoke.sh` verifies the packed tarball by installing it into a fresh project and driving the MCP `initialize` / `tools/list` handshake over stdio from both the `npx` entry point and the installed bin.
 
 ### Changed
 
@@ -25,6 +28,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Align Node 22.19+ requirements, contributor checks, install policy, LF text handling, CI and Docker build exclusions across the code-mode server family.
 - Upgrade the development toolchain to current majors: ESLint 10 with flat config (replacing the legacy `.eslintrc.cjs`), `typescript-eslint` 8 via the meta package, Vitest 5 with V8 coverage and Vite 8, TypeScript 6, Prettier 3.9, tsx 4.23 and dotenv 18. This also clears the remaining dev-only `npm audit` findings.
 - Build the Docker image on Node.js 24 (current LTS); the runtime requirement for users stays Node.js 22.19+.
+- The npm publish step accepts a granular `NPM_TOKEN` fallback (`NODE_AUTH_TOKEN`) so a first release can publish before a trusted publisher can be configured; npm prefers OIDC when it is available.
+
+### Fixed
+
+- Release notes now link `Full Changelog` against the previous reachable `v*` tag, or the tag's commit history for a first release, instead of a broken `compare/...` URL.
 
 ### Security
 
@@ -134,7 +142,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Graceful shutdown** for both stdio and HTTP transports with signal deduplication
 - **Startup health check** validates FortiManager connectivity at boot
 
-[Unreleased]: https://github.com/jmpijll/fortimanager-code-mode-mcp/compare/v1.1.0...HEAD
+[Unreleased]: https://github.com/jmpijll/fortimanager-code-mode-mcp/compare/v1.2.0...HEAD
+[1.2.0]: https://github.com/jmpijll/fortimanager-code-mode-mcp/compare/v1.1.0...v1.2.0
 [1.1.0]: https://github.com/jmpijll/fortimanager-code-mode-mcp/compare/v1.0.2...v1.1.0
 [1.0.2]: https://github.com/jmpijll/fortimanager-code-mode-mcp/compare/v1.0.1...v1.0.2
 [1.0.1]: https://github.com/jmpijll/fortimanager-code-mode-mcp/compare/v1.0.0...v1.0.1
