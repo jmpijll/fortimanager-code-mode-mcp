@@ -4,9 +4,14 @@
  * Everything above node:http is web-standard: routes are pure
  * request-to-response functions, testable via `app.fetch(request, peer)`.
  * `listenHttp` is the only part that touches the socket.
+ *
+ * The edge is split in two so no request body is read before the gates run:
+ * `admit` decides `/health`, 404, 429 and 401 from the request head alone
+ * (method, path, headers, peer IP), and `serve` runs the MCP handler for the
+ * requests that pass. `fetch` keeps both behind one entry point.
  */
 
-import { createServer, type IncomingMessage } from 'node:http';
+import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
 import { timingSafeEqual } from 'node:crypto';
 import { createMcpHandler } from '@modelcontextprotocol/server';
 import { toNodeHandler } from '@modelcontextprotocol/node';
@@ -34,6 +39,22 @@ export interface HttpAppOptions {
 }
 
 export interface HttpApp {
+  /**
+   * Gate a request from its head alone — method, path, headers and peer IP.
+   * Returns the `/health`, 404, 429 or 401 response, or `undefined` when the
+   * request is an admitted `/mcp` call for {@link HttpApp.serve}.
+   *
+   * Synchronous on purpose: `listenHttp` calls it before the node adapter
+   * reads a body, so an unauthenticated or rate-limited caller is answered
+   * without paying for the upload.
+   */
+  admit: (head: Request, peer: Peer) => Response | undefined;
+  /**
+   * Run an admitted `/mcp` request through the MCP handler. The request body
+   * belongs to the SDK adapter, which reads (and caps) it itself.
+   */
+  serve: (request: Request) => Promise<Response>;
+  /** `admit` then `serve` — one entry point for socket-free callers. */
   fetch: (request: Request, peer: Peer) => Promise<Response>;
   close: () => Promise<void>;
 }
@@ -155,6 +176,16 @@ function callerFrom(request: Request | undefined, passthrough: boolean): CallerS
   return fmgToken ? { fmgToken } : {};
 }
 
+/**
+ * Best-effort caller label for the `serve` log lines. The socket address is
+ * known only to the gate, so these lines reuse the limiter's first-hop
+ * `X-Forwarded-For` rule and fall back to `unknown`.
+ */
+function forwardedIp(request: Request): string {
+  const forwarded = request.headers.get('x-forwarded-for');
+  return forwarded?.split(',')[0]?.trim() ?? 'unknown';
+}
+
 // ─── HTTP App ───────────────────────────────────────────────────────
 
 /**
@@ -191,70 +222,80 @@ export function createHttpApp(opts: HttpAppOptions): HttpApp {
 
   let closed = false;
 
-  const fetch = async (request: Request, peer: Peer): Promise<Response> => {
-    const startTime = Date.now();
+  const admit = (head: Request, peer: Peer): Response | undefined => {
     stats.totalRequests++;
 
-    try {
-      const path = new URL(request.url).pathname;
-      const method = request.method;
+    const path = new URL(head.url).pathname;
+    const method = head.method;
 
-      // Health-check endpoint (not rate-limited, no auth)
-      if (path === '/health' && method === 'GET') {
-        stats.healthRequests++;
-        return json(200, {
-          status: 'ok',
-          version: SERVER_VERSION,
-          uptime: Math.floor((Date.now() - new Date(stats.startedAt).getTime()) / 1000),
-          stats: {
-            totalRequests: stats.totalRequests,
-            mcpRequests: stats.mcpRequests,
-            rateLimited: stats.rateLimited,
-            errors: stats.errors,
-          },
-        });
-      }
+    // Health-check endpoint (not rate-limited, no auth)
+    if (path === '/health' && method === 'GET') {
+      stats.healthRequests++;
+      return json(200, {
+        status: 'ok',
+        version: SERVER_VERSION,
+        uptime: Math.floor((Date.now() - new Date(stats.startedAt).getTime()) / 1000),
+        stats: {
+          totalRequests: stats.totalRequests,
+          mcpRequests: stats.mcpRequests,
+          rateLimited: stats.rateLimited,
+          errors: stats.errors,
+        },
+      });
+    }
 
-      if (path === '/mcp') {
-        // Rate limiting before anything else on the MCP endpoint
-        if (!rateLimiter.allow(peer.ip)) {
-          stats.rateLimited++;
-          opts.logger.info(`Rate limited: ${peer.ip} ${method} ${path}`);
-          return json(
-            429,
-            { error: 'Too many requests. Limit: 60 per minute.' },
-            { 'Retry-After': '60' },
-          );
-        }
-
-        // Optional Bearer auth gate (only when MCP_API_KEY is configured).
-        // Runs before request bookkeeping so unauthenticated requests don't
-        // pollute the mcpRequests counter.
-        if (expectedAuthHeader && !bearerMatches(request, expectedAuthHeader)) {
-          stats.errors++;
-          opts.logger.info(`Unauthorized: ${peer.ip} ${method} ${path}`);
-          return json(
-            401,
-            {
-              jsonrpc: '2.0',
-              error: { code: -32001, message: 'Unauthorized' },
-              id: null,
-            },
-            { 'WWW-Authenticate': 'Bearer realm="mcp"' },
-          );
-        }
-
-        stats.mcpRequests++;
-        const passthroughToken = opts.tokenPassthrough ? request.headers.get('x-fmg-token') : null;
-        opts.logger.info(
-          `MCP ${method} from ${peer.ip}${passthroughToken ? ' [token=passthrough]' : ''}`,
-        );
-        const response = await mcp.fetch(request);
-        opts.logger.info(`MCP ${method} completed in ${String(Date.now() - startTime)}ms`);
-        return response;
-      }
-
+    if (path !== '/mcp') {
       return json(404, { error: 'Not found' });
+    }
+
+    // Rate limiting before anything else on the MCP endpoint
+    if (!rateLimiter.allow(peer.ip)) {
+      stats.rateLimited++;
+      opts.logger.info(`Rate limited: ${peer.ip} ${method} ${path}`);
+      return json(
+        429,
+        { error: 'Too many requests. Limit: 60 per minute.' },
+        { 'Retry-After': '60' },
+      );
+    }
+
+    // Optional Bearer auth gate (only when MCP_API_KEY is configured).
+    // Runs before request bookkeeping so unauthenticated requests don't
+    // pollute the mcpRequests counter.
+    if (expectedAuthHeader && !bearerMatches(head, expectedAuthHeader)) {
+      stats.errors++;
+      opts.logger.info(`Unauthorized: ${peer.ip} ${method} ${path}`);
+      return json(
+        401,
+        {
+          jsonrpc: '2.0',
+          error: { code: -32001, message: 'Unauthorized' },
+          id: null,
+        },
+        { 'WWW-Authenticate': 'Bearer realm="mcp"' },
+      );
+    }
+
+    return undefined;
+  };
+
+  const serve = async (request: Request): Promise<Response> => {
+    const startTime = Date.now();
+    const method = request.method;
+
+    stats.mcpRequests++;
+    const passthroughToken = opts.tokenPassthrough ? request.headers.get('x-fmg-token') : null;
+    opts.logger.info(
+      `MCP ${method} from ${forwardedIp(request)}${passthroughToken ? ' [token=passthrough]' : ''}`,
+    );
+    const response = await mcp.fetch(request);
+    opts.logger.info(`MCP ${method} completed in ${String(Date.now() - startTime)}ms`);
+    return response;
+  };
+
+  const fetch = async (request: Request, peer: Peer): Promise<Response> => {
+    try {
+      return admit(request, peer) ?? (await serve(request));
     } catch (err: unknown) {
       stats.errors++;
       opts.logger.error('HTTP handler error:', err);
@@ -269,25 +310,79 @@ export function createHttpApp(opts: HttpAppOptions): HttpApp {
     await mcp.close();
   };
 
-  return { fetch, close };
+  return { admit, serve, fetch, close };
 }
 
 // ─── Node Listener ──────────────────────────────────────────────────
 
 /**
- * Bind the app to a node:http server. The adapter closure is rebuilt per
- * request so each one sees its own socket address; it is cheap and keeps SSE
- * backpressure intact.
+ * A body-less `Request` carrying the node request's head, for {@link HttpApp.admit}.
+ * Node only hands out arrays for `set-cookie`, which no gate reads, so
+ * anything else odd is skipped rather than joined by a guessed rule.
+ */
+function headRequest(req: IncomingMessage): Request {
+  const host = typeof req.headers.host === 'string' ? req.headers.host : 'localhost';
+  const headers = new Headers();
+  for (const [name, value] of Object.entries(req.headers)) {
+    if (typeof value === 'string') headers.set(name, value);
+  }
+
+  return new Request(`http://${host}${req.url ?? '/'}`, {
+    method: req.method ?? 'GET',
+    headers,
+  });
+}
+
+/**
+ * Write a gate response straight to the socket. The request body is never
+ * read, and `Connection: close` stops a half-sent body from pinning the
+ * connection after the answer is out.
+ */
+async function writeGateResponse(res: ServerResponse, response: Response): Promise<void> {
+  const headers: Record<string, string> = {};
+  response.headers.forEach((value, name) => {
+    headers[name] = value;
+  });
+
+  res.writeHead(response.status, { ...headers, Connection: 'close' });
+  res.end(await response.text());
+}
+
+/**
+ * Bind the app to a node:http server. Each request is gated from its head
+ * first; only an admitted `/mcp` request reaches the adapter, which then
+ * reads the body and owns the response stream (keeping SSE backpressure).
  */
 export function listenHttp(
   app: HttpApp,
   at: { port: number; host?: string },
 ): Promise<HttpListener> {
   const httpServer = createServer((req, res) => {
-    const handle = toNodeHandler({
-      fetch: (request) => app.fetch(request, { ip: getClientIp(req) }),
+    let gate: Response | undefined;
+    try {
+      gate = app.admit(headRequest(req), { ip: getClientIp(req) });
+    } catch (err: unknown) {
+      // A request the edge cannot even build a head from (bad URL, forbidden
+      // method) never reaches the SDK; answer it like node:http used to.
+      console.error('[ERROR] HTTP handler error:', err);
+      res.writeHead(500, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: 'Internal server error' }));
+      return;
+    }
+
+    if (gate) {
+      void writeGateResponse(res, gate).catch((err: unknown) => {
+        console.error('[ERROR] HTTP handler error:', err);
+      });
+      return;
+    }
+
+    const handler = toNodeHandler({
+      fetch: (request) => app.serve(request),
     });
-    void handle(req, res);
+    void handler(req, res).catch((err: unknown) => {
+      console.error('[ERROR] HTTP handler error:', err);
+    });
   });
 
   return new Promise<HttpListener>((resolvePromise, rejectPromise) => {

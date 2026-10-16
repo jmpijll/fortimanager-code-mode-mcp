@@ -8,7 +8,8 @@
  *   the Bearer gate and the per-IP rate limit without opening a port.
  * - Over a real socket: `listenHttp(app, { port: 0 })` + a v2 `Client` covers
  *   the full handshake (legacy and modern era) and `X-FMG-Token` passthrough
- *   down to the mocked FortiManager client.
+ *   down to the mocked FortiManager client. Raw requests with an unfinished
+ *   body pin down that every gate decides before that body is read.
  *
  * The sequential-clients test guards
  * https://github.com/jmpijll/fortimanager-code-mode-mcp/issues/13: every
@@ -18,6 +19,7 @@
 
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { readFileSync } from 'node:fs';
+import { connect as netConnect } from 'node:net';
 import {
   Client,
   StreamableHTTPClientTransport,
@@ -80,6 +82,68 @@ async function firstSseMessage(res: Response): Promise<Record<string, unknown>> 
   const dataLine = text.split('\n').find((line) => line.startsWith('data: '));
   if (!dataLine) throw new Error(`No data line in SSE response: ${text}`);
   return JSON.parse(dataLine.slice('data: '.length)) as Record<string, unknown>;
+}
+
+// ─── Raw Socket Helpers ─────────────────────────────────────────────
+
+/**
+ * Write raw HTTP bytes and resolve with the response once the server closes
+ * the connection. The caller never finishes the request body, so a response
+ * that arrives proves the gate answered without buffering that body.
+ */
+function probeRawResponse(port: number, requestBytes: string, timeoutMs = 500): Promise<string> {
+  return new Promise<string>((resolvePromise, rejectPromise) => {
+    const socket = netConnect(port, '127.0.0.1');
+    socket.setEncoding('utf8');
+    let received = '';
+    const timer = setTimeout(() => {
+      socket.destroy();
+      rejectPromise(new Error('no response before the request body was completed'));
+    }, timeoutMs);
+
+    socket.on('connect', () => {
+      socket.write(requestBytes);
+    });
+    socket.on('data', (chunk: string) => {
+      received += chunk;
+    });
+    socket.on('end', () => {
+      clearTimeout(timer);
+      resolvePromise(received);
+    });
+    socket.on('error', (err) => {
+      clearTimeout(timer);
+      // The server tearing the socket down after the answer is expected.
+      if (received.length > 0) resolvePromise(received);
+      else rejectPromise(err);
+    });
+  });
+}
+
+/** Head of a `POST` whose declared two-byte body is only half sent. */
+function partialBodyHead(path: string, headers: string[] = []): string {
+  return [
+    `POST ${path} HTTP/1.1`,
+    'Host: 127.0.0.1',
+    'Content-Type: application/json',
+    'Content-Length: 2',
+    ...headers,
+    '',
+    'x',
+  ].join('\r\n');
+}
+
+/** Head of a `POST` claiming a 4 MiB + 1 body that is never sent. */
+function oversizedBodyHead(path: string, headers: string[] = []): string {
+  return [
+    `POST ${path} HTTP/1.1`,
+    'Host: 127.0.0.1',
+    'Content-Type: application/json',
+    'Content-Length: 4194305',
+    ...headers,
+    '',
+    '',
+  ].join('\r\n');
 }
 
 // ─── App Harness ────────────────────────────────────────────────────
@@ -342,6 +406,63 @@ describe('createHttpApp — per-IP rate limiting', () => {
 
     const health = await app.fetch(new Request('http://localhost/health'), { ip: '10.0.0.1' });
     expect(health.status).toBe(200);
+  });
+});
+
+// ─── Gates run before the body (real socket) ────────────────────────
+
+describe('listenHttp — gate responses before the request body', () => {
+  const API_KEY = 'gate-before-body-key';
+
+  it('answers an unauthenticated POST before its body is complete', async () => {
+    const { baseUrl } = await makeListener({ apiKey: API_KEY });
+    const response = await probeRawResponse(Number(baseUrl.port), partialBodyHead('/mcp'));
+
+    expect(response).toMatch(/^HTTP\/1\.1 401 /);
+    expect(response.toLowerCase()).toContain('www-authenticate: bearer realm="mcp"');
+  });
+
+  it('answers a rate-limited POST before its body is complete', async () => {
+    const { app, baseUrl } = await makeListener({
+      apiKey: API_KEY,
+      rateLimit: { windowMs: 60_000, max: 1 },
+    });
+    const authorized = mcpPost(INITIALIZE_2025, { Authorization: `Bearer ${API_KEY}` });
+    expect((await app.fetch(authorized, { ip: '10.0.0.1' })).status).toBe(200);
+
+    const response = await probeRawResponse(
+      Number(baseUrl.port),
+      partialBodyHead('/mcp', ['X-Forwarded-For: 10.0.0.1']),
+    );
+
+    expect(response).toMatch(/^HTTP\/1\.1 429 /);
+    expect(response.toLowerCase()).toContain('retry-after: 60');
+  });
+
+  it('answers an unknown path before its body is complete', async () => {
+    const { baseUrl } = await makeListener();
+    const response = await probeRawResponse(Number(baseUrl.port), partialBodyHead('/unknown'));
+
+    expect(response).toMatch(/^HTTP\/1\.1 404 /);
+    expect(response).toContain('{"error":"Not found"}');
+  });
+
+  it('challenges an unauthenticated oversized body instead of returning 413', async () => {
+    const { baseUrl } = await makeListener({ apiKey: API_KEY });
+    const response = await probeRawResponse(Number(baseUrl.port), oversizedBodyHead('/mcp'));
+
+    expect(response).toMatch(/^HTTP\/1\.1 401 /);
+    expect(response.toLowerCase()).toContain('www-authenticate: bearer realm="mcp"');
+  });
+
+  it('still applies the SDK body cap to an authenticated request', async () => {
+    const { baseUrl } = await makeListener({ apiKey: API_KEY });
+    const response = await probeRawResponse(
+      Number(baseUrl.port),
+      oversizedBodyHead('/mcp', [`Authorization: Bearer ${API_KEY}`]),
+    );
+
+    expect(response).toMatch(/^HTTP\/1\.1 413 /);
   });
 });
 
