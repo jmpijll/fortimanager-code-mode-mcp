@@ -406,7 +406,7 @@ claims that live services or clients were retested in this change.
 - **Dual API version support** — Spec generator supports FortiManager 7.4.x and 7.6.x
 - **QuickJS WASM sandbox** — Memory/CPU-limited code execution with no host access
 - **Dual transport** — Stdio (for Claude Desktop / local dev) and Streamable HTTP (for Docker / production)
-- **Docker-ready** — Multi-stage Alpine build with health checks
+- **Docker-ready** — Multi-stage Node.js 24 Alpine build with health checks
 - **Tested against live FortiManager** — 152 tests (66 unit + 86 integration) passing against FMG v7.6.6
 - **Security hardened** — HTTP timeout, response validation, sandbox method/params validation, log caps, code size limits
 
@@ -730,7 +730,7 @@ Add to your Claude Desktop configuration (`claude_desktop_config.json`):
 # Install dependencies
 npm ci
 
-# Run unit tests (66 tests across 5 suites)
+# Run unit tests (92 tests across 6 files)
 npm test
 
 # Run integration tests against a live FortiManager (requires .env)
@@ -773,7 +773,7 @@ src/
 │   └── fmg-api-spec-7.6.json  # 82 modules, 22,060 objects, 49,285 URLs
 ├── types/            # Shared type definitions
 ├── config.ts         # Zod-validated environment config
-├── __tests__/        # Unit tests (66 tests across 5 suites)
+├── __tests__/        # Unit tests (92 tests across 6 files)
 │   └── fixtures/     # Sample spec, response builders
 └── index.ts          # Entry point
 scripts/

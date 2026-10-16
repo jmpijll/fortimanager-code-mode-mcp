@@ -32,15 +32,12 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 /** Simple structured logger that writes to stderr (stdout reserved for stdio transport) */
 const logger = {
   info: (msg: string, ...args: unknown[]): void => {
-    // eslint-disable-next-line no-console
     console.error(`[INFO] ${msg}`, ...args);
   },
   warn: (msg: string, ...args: unknown[]): void => {
-    // eslint-disable-next-line no-console
     console.error(`[WARN] ${msg}`, ...args);
   },
   error: (msg: string, ...args: unknown[]): void => {
-    // eslint-disable-next-line no-console
     console.error(`[ERROR] ${msg}`, ...args);
   },
 };
@@ -78,6 +75,7 @@ async function loadSpec(version: string): Promise<FmgApiSpec> {
         `\n` +
         `  See README.md for detailed instructions.\n` +
         `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n`,
+      { cause: err },
     );
   }
 

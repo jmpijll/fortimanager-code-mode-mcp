@@ -37,7 +37,7 @@ Install from source and point your MCP client at the built `dist/index.js`.
 
 ### Requirements
 
-- Node.js **22.19.0 or newer** and npm. CI checks Node 22 and 24.
+- Node.js **22.19.0 or newer** and npm. CI checks Node 22 and 24; the Docker image runs Node 24.
 - FortiManager 7.4 or 7.6, an API token, and locally generated API specs.
 
 Before building, download the Fortinet HTML reference and run `npm run generate:spec`.

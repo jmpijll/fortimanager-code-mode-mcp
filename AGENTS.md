@@ -141,7 +141,7 @@ scripts/
 
 ### Docker Build (on merge to main)
 
-1. Multi-stage build → Node.js Alpine
+1. Multi-stage build → Node.js 24 Alpine
 2. Push to `ghcr.io/jmpijll/fortimanager-code-mode-mcp`
 3. Tag with version + `latest`
 
