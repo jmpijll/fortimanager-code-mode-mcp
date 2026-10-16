@@ -25,6 +25,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Align Node 22.19+ requirements, contributor checks, install policy, LF text handling, CI and Docker build exclusions across the code-mode server family.
 - Upgrade the development toolchain to current majors: ESLint 10 with flat config (replacing the legacy `.eslintrc.cjs`), `typescript-eslint` 8 via the meta package, Vitest 5 with V8 coverage and Vite 8, TypeScript 6, Prettier 3.9, tsx 4.23 and dotenv 18. This also clears the remaining dev-only `npm audit` findings.
 - Build the Docker image on Node.js 24 (current LTS); the runtime requirement for users stays Node.js 22.19+.
+- Upgrade `undici` 7.30.1 → 8.11.2 and route `FMG_VERIFY_SSL=false` requests through undici's own `fetch`, so the TLS-bypass `Agent` and `fetch` always come from the same undici version — the mixed pair failed with `invalid onRequestStart method`.
 
 ### Security
 

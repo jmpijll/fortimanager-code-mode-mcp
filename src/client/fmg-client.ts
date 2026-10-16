@@ -6,6 +6,7 @@
  * and all standard FMG methods: get, set, add, update, delete, exec, clone, move.
  */
 
+import type { Dispatcher } from 'undici';
 import { type AuthProvider, createAuthProvider } from './auth.js';
 import {
   FmgApiError,
@@ -27,6 +28,22 @@ const DEFAULT_REQUEST_TIMEOUT_MS = 30_000;
 /** Maximum request ID before wrapping */
 const MAX_REQUEST_ID = 1_000_000_000;
 
+/** Response surface the client needs; satisfied by both fetch implementations */
+interface FetchedResponse {
+  ok: boolean;
+  status: number;
+  statusText: string;
+  json(): Promise<unknown>;
+}
+
+/** Request init shared by both fetch implementations (no version-specific fields) */
+interface FetchedRequestInit {
+  method: 'POST';
+  headers: Record<string, string>;
+  body: string;
+  signal: AbortSignal;
+}
+
 export class FmgClient {
   private readonly endpoint: string;
   private readonly auth: AuthProvider;
@@ -35,7 +52,7 @@ export class FmgClient {
   private requestId = 0;
 
   /** Cached undici Agent for SSL bypass — created lazily, reused across requests */
-  private unsafeDispatcher: unknown = null;
+  private unsafeDispatcher: Dispatcher | null = null;
 
   constructor(
     private readonly config: FmgClientConfig,
@@ -206,30 +223,34 @@ export class FmgClient {
         : this.auth.getAuthHeaders()),
     };
 
-    // Build fetch options with timeout
-    const fetchOptions: RequestInit = {
+    const init: FetchedRequestInit = {
       method: 'POST',
       headers,
       body: JSON.stringify(request),
       signal: AbortSignal.timeout(this.requestTimeoutMs),
     };
 
-    // Handle SSL verification (Node.js specific)
-    if (!this.verifySsl) {
-      // @ts-expect-error -- Node.js-specific fetch option for TLS
-      fetchOptions.dispatcher = await this.getUnsafeDispatcher();
-    }
+    // A TLS-bypass Agent only works with a fetch from the same undici instance;
+    // Node's bundled fetch rejects Agents from other versions (undici 8 breaks
+    // the dispatcher handler API), so that path loads both from the installed
+    // undici. The verifying path keeps using the built-in fetch and no Agent.
+    const send: () => Promise<FetchedResponse> = this.verifySsl
+      ? () => fetch(this.endpoint, init)
+      : await this.createInsecureSender(init);
 
-    let httpResponse: Response;
+    let httpResponse: FetchedResponse;
     try {
-      httpResponse = await fetch(this.endpoint, fetchOptions);
+      httpResponse = await send();
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : String(err);
       const isTimeout = err instanceof DOMException && err.name === 'TimeoutError';
+      // fetch() hides the real TLS/network failure in `cause`; surface it
+      const cause =
+        err instanceof Error && err.cause instanceof Error ? `: ${err.cause.message}` : '';
       throw new FmgTransportError(
         isTimeout
           ? `Request to ${this.endpoint} timed out after ${String(this.requestTimeoutMs)}ms`
-          : `Failed to connect to ${this.endpoint}: ${message}`,
+          : `Failed to connect to ${this.endpoint}: ${message}${cause}`,
         undefined,
         this.endpoint,
       );
@@ -266,20 +287,16 @@ export class FmgClient {
   }
 
   /**
-   * Get an undici dispatcher that skips TLS verification.
+   * Build a sender that skips TLS verification.
    * Only used when FMG_VERIFY_SSL=false (e.g., self-signed certs in lab environments).
    * The Agent is cached and reused across requests.
    */
-  private async getUnsafeDispatcher(): Promise<unknown> {
-    if (this.unsafeDispatcher) return this.unsafeDispatcher;
-
+  private async createInsecureSender(
+    init: FetchedRequestInit,
+  ): Promise<() => Promise<FetchedResponse>> {
+    let undici: typeof import('undici');
     try {
-      const undici = await import('undici');
-      const AgentClass = undici.Agent;
-      this.unsafeDispatcher = new AgentClass({
-        connect: { rejectUnauthorized: false },
-      });
-      return this.unsafeDispatcher;
+      undici = await import('undici');
     } catch {
       throw new FmgTransportError(
         'Cannot disable SSL verification: undici package not available. ' +
@@ -288,5 +305,11 @@ export class FmgClient {
         this.endpoint,
       );
     }
+
+    const dispatcher = (this.unsafeDispatcher ??= new undici.Agent({
+      connect: { rejectUnauthorized: false },
+    }));
+
+    return () => undici.fetch(this.endpoint, { ...init, dispatcher });
   }
 }
