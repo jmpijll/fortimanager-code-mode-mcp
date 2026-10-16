@@ -75,7 +75,7 @@ Use this tool to discover API endpoints, look up object attributes, find methods
 
 ### `execute` — Run Live API Calls
 
-Use this tool to interact with FortiManager: read configuration, create objects, modify settings, run diagnostic commands, and more.
+Use this tool to interact with FortiManager: read configuration, create objects, modify settings, run diagnostic commands, and more. It is marked destructive in the server's MCP tool annotations, so clients that honour annotations prompt for confirmation before running it.
 
 ---
 

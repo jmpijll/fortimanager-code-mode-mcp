@@ -190,6 +190,12 @@ export function createMcpServer(options: CreateServerOptions): McpServer {
     {
       title: 'Search FMG API Spec',
       description: SEARCH_TOOL_DESCRIPTION,
+      annotations: {
+        readOnlyHint: true,
+        destructiveHint: false,
+        idempotentHint: true,
+        openWorldHint: false,
+      },
       inputSchema: {
         code: z
           .string()
@@ -237,6 +243,12 @@ export function createMcpServer(options: CreateServerOptions): McpServer {
     {
       title: 'Execute FMG API Call',
       description: EXECUTE_TOOL_DESCRIPTION,
+      annotations: {
+        readOnlyHint: false,
+        destructiveHint: true,
+        idempotentHint: false,
+        openWorldHint: true,
+      },
       inputSchema: {
         code: z
           .string()

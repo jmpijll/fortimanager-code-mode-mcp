@@ -29,6 +29,8 @@ API calls go through the host; credentials remain outside the sandbox.
 - **Choose a transport.** Stdio for local clients; Streamable HTTP for hosted use.
 - **Keep credentials on the host.** Optional HTTP Bearer auth and per-request `X-FMG-Token` passthrough.
 
+The `execute` tool is marked destructive in its MCP annotations, so clients that honour annotations prompt for confirmation before running it.
+
 ## Get started
 
 Install from source and point your MCP client at the built `dist/index.js`.
