@@ -56,17 +56,17 @@
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
-    "@modelcontextprotocol/client": "^2.3.1",
+    "@modelcontextprotocol/client": "^2.4.0",
     "@types/node": "^22.20.5",
-    "@vitest/coverage-v8": "^5.0.5",
-    "dotenv": "^18.0.8",
-    "eslint": "^10.12.0",
+    "@vitest/coverage-v8": "^5.1.0",
+    "dotenv": "^18.0.9",
+    "eslint": "^10.14.0",
     "prettier": "^3.9.10",
     "tsx": "^4.23.15",
     "typescript": "~6.0.3",
-    "typescript-eslint": "^8.71.2",
-    "vite": "^8.3.4",
-    "vitest": "^5.0.5"
+    "typescript-eslint": "^8.72.1",
+    "vite": "^8.3.6",
+    "vitest": "^5.1.0"
   },
   "dependencies": {
     "@modelcontextprotocol/node": "^2.1.1",
